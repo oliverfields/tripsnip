@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Responsive Pane Layout</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body {
+margin: 0;
+font-family: sans-serif;
+}
+.container {
+display: flex;
+height: 100vh;
+}
+.pane {
+padding: 1em;
+box-sizing: border-box;
+overflow-y: auto;
+}
+.menu {
+background: #f4f4f4;
+width: 30%;
+}
+.content {
+background: #fff;
+width: 70%;
+}
+/* Hide toggle button on wide screens */
+.toggle-btn {
+display: none;
+padding: 1em;
+background: #333;
+color: white;
+border: none;
+width: 100%;
+}
+
+/* Mobile layout (below 600px) */
+@media (max-width: 600px) {
+.container {
+flex-direction: column;
+}
+.pane {
+width: 100%;
+display: none;
+}
+.pane.active {
+display: block;
+}
+.toggle-btn {
+display: block;
+}
+} /* @media mobile */
+</style>
+</head>
+<body>
+<button class="toggle-btn" onclick="togglePane()">Toggle Pane</button>
+
+<div class="container">
+  <div class="pane menu active" id="menuPane">
+    <h2>Menu</h2>
+    <p>Navigation links go here.</p>
+  </div>
+  <div class="pane content" id="contentPane">
+    <h2>Content</h2>
+    <p>Main content goes here.</p>
+  </div>
+</div>
+
+<script>
+let showingMenu = true;
+
+function togglePane() {
+  const menu = document.getElementById('menuPane');
+  const content = document.getElementById('contentPane');
+
+  showingMenu = !showingMenu;
+
+  if (window.innerWidth <= 600) {
+    if (showingMenu) {
+      menu.classList.add('active');
+      content.classList.remove('active');
+    } else {
+      menu.classList.remove('active');
+      content.classList.add('active');
+    }
+  }
+}
+
+// Ensure correct pane is visible on resize
+window.addEventListener('resize', () => {
+  const menu = document.getElementById('menuPane');
+  const content = document.getElementById('contentPane');
+  if (window.innerWidth > 600) {
+    menu.classList.add('active');
+    content.classList.add('active');
+  } else {
+    togglePane();  // Refresh display
+  }
+});
+</script>
+</body>
+</html>

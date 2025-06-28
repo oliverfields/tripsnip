@@ -1,0 +1,163 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Responsive Pane Layout</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<style>
+body {
+margin: 0;
+font-family: sans-serif;
+}
+.container {
+display: flex;
+height: 100vh;
+}
+.pane {
+padding: 1em;
+box-sizing: border-box;
+overflow-y: auto;
+}
+.menu {
+background: #f4f4f4;
+width: 30%;
+}
+.content {
+background: #fff;
+width: 70%;
+}
+/* Hide toggle button on wide screens */
+.toggle-btn {
+display: none;
+padding: 1em;
+background: #333;
+color: white;
+border: none;
+width: 100%;
+}
+#map {
+height: 100vh;
+width: 100%;
+}
+
+/* Mobile layout (below 600px) */
+@media (max-width: 600px) {
+.container {
+flex-direction: column;
+}
+.pane {
+width: 100%;
+display: none;
+}
+.pane.active {
+display: block;
+}
+.toggle-btn {
+display: block;
+}
+} /* @media mobile */
+</style>
+</head>
+<body>
+<button class="toggle-btn" onclick="togglePane()">Toggle Pane</button>
+
+<div class="container">
+<div class="pane menu active" id="itinerary">
+<h1>Götaleden</h1>
+<h2>Check list</h2>
+<ul>
+<li><del>Doggie passports</del></li>
+<li>Pack</li>
+<li>Home sweet home🏠️</li>
+</ul>
+<h2>Mon 30th Jun 2025, day 1</h2>
+<ul>
+<li>Tog til Gøteborg🚂</li>
+<li>Tog til Alingsås🚂</li>
+<li>Book overnatting i Alingsås, 7 mulige🛏️</li>
+</ul>
+<h2>Tue 1st Jul 2025, day 2</h2>
+<ul>
+<li>Gå fra Alingsås til Norsesund, 15km (etappe 9 og 8)</li>
+<li>INGEN OVERNATTING:(</li>
+<li>Tog til Larvik🚂</li>
+</ul>
+<h2>Wed 2nd Jul 2025, day 3</h2>
+<ul>
+<li>Gå fra Skatås til Gøteborg 6km (etappe 1)</li>
+<li><del>Tog hjem</del></li>
+</ul>
+</div>
+<div class="pane content" id="map"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.5.1/gpx.min.js"></script>
+<script>
+// Initialize the map
+  const map = L.map('map').setView([48.8584, 2.2945], 13); // Paris coords
+
+  // Add OpenStreetMap tile layer
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
+
+  // Add some markers
+  const markerData = [
+{ lat: 59.1907, lng: 10.8998, label: 'Home sweet home🏠️' },
+{ lat: 59.2768, lng: 11.6798, label: 'Tog til Gøteborg🚂' },
+{ lat: 59.2834, lng: 11.4471, label: 'Tog til Alingsås🚂' },
+{ lat: 59.2768, lng: 11.6798, label: 'Tog til Larvik🚂' }
+];
+
+  // Add markers and collect coordinates
+  const markerCoords = markerData.map(({ lat, lng, label }) => {
+    L.marker([lat, lng])
+      .addTo(map)
+      .bindTooltip(label, { permanent: false, direction: 'top' });
+    return [lat, lng];
+  });
+
+  // Zoom and center map to fit all markers
+  const bounds = L.latLngBounds(markerCoords);
+  map.fitBounds(bounds);
+
+</script>
+<script>
+let showingMenu = true;
+
+function togglePane() {
+  const menu = document.getElementById('itinerary');
+  const content = document.getElementById('map');
+
+  showingMenu = !showingMenu;
+
+  if (window.innerWidth <= 600) {
+    if (showingMenu) {
+      menu.classList.add('active');
+      content.classList.remove('active');
+    } else {
+      menu.classList.remove('active');
+      content.classList.add('active');
+    }
+  }
+}
+
+// Ensure correct pane is visible on resize
+window.addEventListener('resize', () => {
+  const menu = document.getElementById('itinerary');
+  const content = document.getElementById('map');
+  if (window.innerWidth > 600) {
+    menu.classList.add('active');
+    content.classList.add('active');
+  } else {
+    togglePane();  // Refresh display
+  }
+});
+</script>
+</body>
+</html>
+
+

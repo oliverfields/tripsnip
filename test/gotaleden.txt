@@ -1,0 +1,32 @@
+# Götaleden
+
+- route:gotaleden.gpx
+
+## Check list
+
+- done:Doggie passports
+- todo:Pack
+- marker:59.1907,10.8998 Home sweet home🏠️
+
+
+## 2025-06-30
+
+- marker:59.2768,11.6798 Tog til Gøteborg🚂
+- marker:59.2834,11.4471 Tog til Alingsås🚂
+- todo:Book overnatting i Alingsås, 7 mulige🛏️
+- route:day1.gpx
+
+## 2025-07-01
+
+- todo:Gå fra Alingsås til Norsesund, 15km (etappe 9 og 8)
+- INGEN OVERNATTING:(
+- marker:59.2768,11.6798 Tog til Larvik🚂
+
+
+
+## 2025-07-02
+
+- Gå fra Skatås til Gøteborg 6km (etappe 1)
+- done:Tog hjem
+- route:day3.gpx
+

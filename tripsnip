@@ -1,0 +1,251 @@
+#!/usr/bin/python3
+# -*- coding: utf-8 -*-
+
+
+from sys import argv, exit
+from re import search
+from datetime import date
+from markdown import markdown
+
+
+def print_leaflet_markers():
+    m_js = ''
+
+    for d in map_data.values():
+        for m in d['markers']:
+            m_js += '{ lat: ' + m['lat'] + ', lng: ' + m['lng'] + ", label: '" + m['txt'] + "' },\n"
+
+    print(m_js.rstrip(',\n'))
+
+
+def ordinal(n):
+    if 10 <= n % 100 <= 20:
+        suffix = 'th'
+    else:
+        suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
+    return f"{n}{suffix}"
+
+
+def add_map_data(data_content, data_type='markers'):
+    if not day_count in map_data.keys():
+        map_data[day_count] = {'markers': [], 'routes': [], 'todos': [], 'dones': []}
+
+
+    try:
+        map_data[day_count][data_type].append(data_content)
+    except KeyError:
+        print('Illegal data_type: ' + data_type)
+        exit(1)
+
+
+routes = [] # gpx file paths
+i_md = '' # itinenary markdown
+day_count = 0
+last_date = False
+map_data = {} # markers, routes etc for drawing map
+
+
+if len(argv) != 2:
+    print("Usage: tripsnip <tripsnip flavour markdown file>")
+    exit(1)
+
+
+with open(argv[1], 'r') as f:
+    for l in f:
+        l = l.strip()
+
+        # parse line for tripsnip stuff
+
+        if l.startswith('- todo:'):
+            i_md += '- ' + l.lstrip('- todo:') + '\n'
+            add_map_data(l.strip('- todo:'), data_type='todos')
+
+        elif l.startswith('- done:'):
+            i_md += '- <del>' + l.lstrip('- done:') + '</del>\n'
+            add_map_data(l.strip('- done:'), data_type='dones')
+
+        elif l.startswith('- marker:'):
+            # format: ^- marker:<lat>,<lng> <name>
+            match = search(r'^- marker:([0-9.]*),([0-9.]*)\ (.*)', l)
+
+            try:
+                i_md += '- ' + match.group(3) + '\n'
+
+                marker = {'lat': match.group(1), 'lng': match.group(2), 'txt': match.group(3)}
+            except AttributeError as e:
+                print(l)
+                exit(1)
+
+            add_map_data(marker, data_type='markers')
+
+        elif l.startswith('- route:'):
+            add_map_data(l.lstrip('- route:'), data_type='routes')
+
+        elif l.startswith('## '):
+            match = search(r'^##\ ([0-9]{4})-([0-9]{2})-([0-9]{2})', l)
+
+            if match:
+                year = int(match.group(1))
+                month = int(match.group(2))
+                day = int(match.group(3))
+
+                d = date(year, month, day)
+
+                # verify dates are consecutive
+                if last_date:
+                    if abs((d - last_date).days) != 1:
+                        print(f'Non consecutive dates: {last_date} and {d}')
+                        exit(1)
+
+                last_date = d
+
+                day_count += 1
+
+                i_md += f'## {d.strftime('%a')} {ordinal(d.day)} {d.strftime('%b %Y')}, day {day_count}\n'
+            else:
+                i_md += l + '\n'
+
+        else:
+            i_md += l + '\n'
+
+#import pprint
+#pprint.pprint(map_data)
+
+print('''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Responsive Pane Layout</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<style>
+body {
+margin: 0;
+font-family: sans-serif;
+}
+.container {
+display: flex;
+height: 100vh;
+}
+.pane {
+padding: 1em;
+box-sizing: border-box;
+overflow-y: auto;
+}
+.menu {
+background: #f4f4f4;
+width: 30%;
+}
+.content {
+background: #fff;
+width: 70%;
+}
+/* Hide toggle button on wide screens */
+.toggle-btn {
+display: none;
+padding: 1em;
+background: #333;
+color: white;
+border: none;
+width: 100%;
+}
+#map {
+height: 100vh;
+width: 100%;
+}
+
+/* Mobile layout (below 600px) */
+@media (max-width: 600px) {
+.container {
+flex-direction: column;
+}
+.pane {
+width: 100%;
+display: none;
+}
+.pane.active {
+display: block;
+}
+.toggle-btn {
+display: block;
+}
+} /* @media mobile */
+</style>
+</head>
+<body>
+<button class="toggle-btn" onclick="togglePane()">Toggle Pane</button>
+
+<div class="container">
+<div class="pane menu active" id="itinerary">''')
+print(markdown(i_md))
+print('''</div>
+<div class="pane content" id="map"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.5.1/gpx.min.js"></script>
+<script>
+// Initialize the map
+  const map = L.map('map').setView([48.8584, 2.2945], 13); // Paris coords
+
+  // Add OpenStreetMap tile layer
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
+
+  // Add some markers
+  const markerData = [''')
+print_leaflet_markers()
+print('''];
+
+  // Add markers and collect coordinates
+  const markerCoords = markerData.map(({ lat, lng, label }) => {
+    L.marker([lat, lng])
+      .addTo(map)
+      .bindTooltip(label, { permanent: false, direction: 'top' });
+    return [lat, lng];
+  });
+
+  // Zoom and center map to fit all markers
+  const bounds = L.latLngBounds(markerCoords);
+  map.fitBounds(bounds);
+
+</script>
+<script>
+let showingMenu = true;
+
+function togglePane() {
+  const menu = document.getElementById('itinerary');
+  const content = document.getElementById('map');
+
+  showingMenu = !showingMenu;
+
+  if (window.innerWidth <= 600) {
+    if (showingMenu) {
+      menu.classList.add('active');
+      content.classList.remove('active');
+    } else {
+      menu.classList.remove('active');
+      content.classList.add('active');
+    }
+  }
+}
+
+// Ensure correct pane is visible on resize
+window.addEventListener('resize', () => {
+  const menu = document.getElementById('itinerary');
+  const content = document.getElementById('map');
+  if (window.innerWidth > 600) {
+    menu.classList.add('active');
+    content.classList.add('active');
+  } else {
+    togglePane();  // Refresh display
+  }
+});
+</script>
+</body>
+</html>
+
+''')
+#print(i_md)
