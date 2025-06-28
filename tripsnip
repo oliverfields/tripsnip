@@ -8,7 +8,19 @@ from datetime import date
 from markdown import markdown
 
 
-def print_leaflet_markers():
+def print_leaflet_gpx_routes_js():
+    g_js = ''
+
+    # gpx files are relative to the .trps file
+
+    for d in map_data.values():
+        for r in d['routes']:
+            print(r)
+
+    print(g_js.rstrip(',\n'))
+
+
+def print_leaflet_markers_js():
     m_js = ''
 
     for d in map_data.values():
@@ -196,8 +208,15 @@ print('''</div>
 
   // Add some markers
   const markerData = [''')
-print_leaflet_markers()
-print('''];
+print_leaflet_markers_js()
+print('''
+];
+
+  const gpxTracks = [
+''')
+print_leaflet_gpx_routes_js()
+print('''
+];
 
   // Add markers and collect coordinates
   const markerCoords = markerData.map(({ lat, lng, label }) => {
