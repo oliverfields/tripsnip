@@ -6,16 +6,20 @@ from sys import argv, exit
 from re import search
 from datetime import date
 from markdown import markdown
+from os.path import dirname
+from os import chdir
 
 
 def print_leaflet_gpx_routes_js():
     g_js = ''
 
     # gpx files are relative to the .trps file
+    chdir(dirname(argv[1]))
 
     for d in map_data.values():
         for r in d['routes']:
-            print(r)
+            with open(r, 'r') as f:
+                g_js += '`' + f.read() + '`,\n'
 
     print(g_js.rstrip(',\n'))
 
@@ -135,6 +139,20 @@ print('''
 body {
 margin: 0;
 font-family: sans-serif;
+font-size: 12px;
+}
+h1 {
+margin-top: 0;
+}
+h2 {
+margin: 1em 0 0 0;
+}
+ul {
+margin-top: .5em;
+padding-left: 1em;
+}
+li {
+margin-bottom: .5em;
 }
 .container {
 display: flex;
@@ -198,38 +216,67 @@ print('''</div>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.5.1/gpx.min.js"></script>
 <script>
-// Initialize the map
-  const map = L.map('map').setView([48.8584, 2.2945], 13); // Paris coords
+ // Initialize the map
+const map = L.map('map', {
+  center: [48.8566, 2.3522],
+  zoom: 13,
+  zoomControl: false
+});
 
-  // Add OpenStreetMap tile layer
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
-  // Add some markers
+  // Master bounds object
+  const allBounds = L.latLngBounds([]);
+
+  // Marker data
   const markerData = [''')
 print_leaflet_markers_js()
 print('''
 ];
 
+// Add markers and expand bounds
+  markerData.forEach(({ lat, lng, label }) => {
+    const marker = L.marker([lat, lng]).addTo(map)
+      .bindTooltip(label, { direction: 'top' });
+    allBounds.extend([lat, lng]);
+  });
+
+  // GPX tracks as inline strings
   const gpxTracks = [
 ''')
 print_leaflet_gpx_routes_js()
 print('''
 ];
 
-  // Add markers and collect coordinates
-  const markerCoords = markerData.map(({ lat, lng, label }) => {
-    L.marker([lat, lng])
-      .addTo(map)
-      .bindTooltip(label, { permanent: false, direction: 'top' });
-    return [lat, lng];
+
+  let loadedTracks = 0;
+
+  // Load GPX routes
+  gpxTracks.forEach(gpxString => {
+    const blob = new Blob([gpxString], { type: 'application/gpx+xml' });
+    const url = URL.createObjectURL(blob);
+
+    new L.GPX(url, {
+      async: true,
+      marker_options: {
+        startIconUrl: null,
+        endIconUrl: null,
+        shadowUrl: null
+      }
+    })
+    .on('loaded', function(e) {
+      allBounds.extend(e.target.getBounds());
+      loadedTracks++;
+
+      // Once all tracks are loaded, fit map to total bounds
+      if (loadedTracks === gpxTracks.length) {
+        map.fitBounds(allBounds);
+      }
+    })
+    .addTo(map);
   });
-
-  // Zoom and center map to fit all markers
-  const bounds = L.latLngBounds(markerCoords);
-  map.fitBounds(bounds);
-
 </script>
 <script>
 let showingMenu = true;
