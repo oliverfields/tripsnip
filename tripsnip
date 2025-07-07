@@ -44,8 +44,7 @@ def ordinal(n):
 
 def add_map_data(data_content, data_type='markers'):
     if not day_count in map_data.keys():
-        map_data[day_count] = {'markers': [], 'routes': [], 'todos': [], 'dones': []}
-
+        map_data[day_count] = {'markers': [], 'routes': [], 'todos': [], 'dones': [], 'date_pretty': current_date_pretty}
 
     try:
         map_data[day_count][data_type].append(data_content)
@@ -53,10 +52,11 @@ def add_map_data(data_content, data_type='markers'):
         print('Illegal data_type: ' + data_type)
         exit(1)
 
-
 routes = [] # gpx file paths
 i_md = '' # itinenary markdown
 day_count = 0
+current_date = False
+current_date_pretty = False
 last_date = False
 map_data = {} # markers, routes etc for drawing map
 
@@ -105,19 +105,20 @@ with open(argv[1], 'r') as f:
                 month = int(match.group(2))
                 day = int(match.group(3))
 
-                d = date(year, month, day)
+                current_date = date(year, month, day)
 
                 # verify dates are consecutive
                 if last_date:
-                    if abs((d - last_date).days) != 1:
-                        print(f'Non consecutive dates: {last_date} and {d}')
+                    if abs((current_date - last_date).days) != 1:
+                        print(f'Non consecutive dates: {last_date} and {current_date}')
                         exit(1)
 
-                last_date = d
+                last_date = current_date
+                current_date_pretty = f'{current_date.strftime('%a')} {ordinal(current_date.day)} {current_date.strftime('%b %Y')}, day {day_count + 1}'
 
                 day_count += 1
 
-                i_md += f'## {d.strftime('%a')} {ordinal(d.day)} {d.strftime('%b %Y')}, day {day_count}\n'
+                i_md += f'## {current_date_pretty}\n'
             else:
                 i_md += l + '\n'
 
@@ -143,9 +144,14 @@ font-size: 12px;
 }
 h1 {
 margin-top: 0;
+color: #76AF5B;
 }
 h2 {
 margin: 1em 0 0 0;
+color: #465068;
+}
+del {
+opacity: .4;
 }
 ul {
 margin-top: .5em;
@@ -164,7 +170,6 @@ overflow-y: auto;
 }
 .menu {
 padding: 1em;
-background: #f4f4f4;
 width: 30%;
 }
 .content {
@@ -173,9 +178,9 @@ width: 70%;
 position: relative;
 }
 /* Hide toggle button on wide screens */
-.toggle-btn {
+#toggle-btn {
 display: none;
-padding: 1em;
+padding: .4em;
 background: #333;
 color: white;
 border: none;
@@ -251,14 +256,14 @@ display: none;
 .pane.active {
 display: block;
 }
-.toggle-btn {
+#toggle-btn {
 display: block;
 }
 } /* @media mobile */
 </style>
 </head>
 <body>
-<button class="toggle-btn" onclick="togglePane()">Toggle Pane</button>
+<button id="toggle-btn" onclick="togglePane()">📄</button>
 
 <div class="container">
 <div class="pane menu active" id="itinerary">
@@ -266,7 +271,7 @@ display: block;
 print(markdown(i_md))
 print('''
 </div><!-- /menu -->
-<div class="pane content">
+<div id="content" class="pane content">
   <div id="map"></div>
   <div id="map-cursor">+</div>
   <div id="map-coords">
@@ -373,14 +378,12 @@ updateCenterCoords();
 map.on('move', updateCenterCoords);
 map.on('zoom', updateCenterCoords);
 
-
-</script>
-<script>
 let showingMenu = true;
 
 function togglePane() {
   const menu = document.getElementById('itinerary');
-  const content = document.getElementById('map');
+  const content = document.getElementById('content');
+  const toggleBtn = document.getElementById('toggle-btn');
 
   showingMenu = !showingMenu;
 
@@ -388,9 +391,12 @@ function togglePane() {
     if (showingMenu) {
       menu.classList.add('active');
       content.classList.remove('active');
+      toggleBtn.innerHTML = '🧭';
     } else {
       menu.classList.remove('active');
       content.classList.add('active');
+      toggleBtn.innerHTML = '📝';
+      map.invalidateSize();
     }
   }
 }
@@ -398,7 +404,7 @@ function togglePane() {
 // Ensure correct pane is visible on resize
 window.addEventListener('resize', () => {
   const menu = document.getElementById('itinerary');
-  const content = document.getElementById('map');
+  const content = document.getElementById('content');
   if (window.innerWidth > 600) {
     menu.classList.add('active');
     content.classList.add('active');
@@ -406,6 +412,7 @@ window.addEventListener('resize', () => {
     togglePane();  // Refresh display
   }
 });
+
 </script>
 <script>
   document.getElementById('copy-btn').addEventListener('click', function () {
@@ -433,4 +440,5 @@ window.addEventListener('resize', () => {
 </html>
 
 ''')
-#print(i_md)
+#import pprint
+#pprint.pprint(map_data)

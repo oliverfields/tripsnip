@@ -14,9 +14,14 @@ font-size: 12px;
 }
 h1 {
 margin-top: 0;
+color: #76AF5B;
 }
 h2 {
 margin: 1em 0 0 0;
+color: #465068;
+}
+del {
+opacity: .4;
 }
 ul {
 margin-top: .5em;
@@ -35,7 +40,6 @@ overflow-y: auto;
 }
 .menu {
 padding: 1em;
-background: #f4f4f4;
 width: 30%;
 }
 .content {
@@ -44,9 +48,9 @@ width: 70%;
 position: relative;
 }
 /* Hide toggle button on wide screens */
-.toggle-btn {
+#toggle-btn {
 display: none;
-padding: 1em;
+padding: .4em;
 background: #333;
 color: white;
 border: none;
@@ -122,14 +126,14 @@ display: none;
 .pane.active {
 display: block;
 }
-.toggle-btn {
+#toggle-btn {
 display: block;
 }
 } /* @media mobile */
 </style>
 </head>
 <body>
-<button class="toggle-btn" onclick="togglePane()">Toggle Pane</button>
+<button id="toggle-btn" onclick="togglePane()">📄</button>
 
 <div class="container">
 <div class="pane menu active" id="itinerary">
@@ -159,7 +163,7 @@ display: block;
 </ul>
 
 </div><!-- /menu -->
-<div class="pane content">
+<div id="content" class="pane content">
   <div id="map"></div>
   <div id="map-cursor">+</div>
   <div id="map-coords">
@@ -50286,14 +50290,12 @@ updateCenterCoords();
 map.on('move', updateCenterCoords);
 map.on('zoom', updateCenterCoords);
 
-
-</script>
-<script>
 let showingMenu = true;
 
 function togglePane() {
   const menu = document.getElementById('itinerary');
-  const content = document.getElementById('map');
+  const content = document.getElementById('content');
+  const toggleBtn = document.getElementById('toggle-btn');
 
   showingMenu = !showingMenu;
 
@@ -50301,9 +50303,12 @@ function togglePane() {
     if (showingMenu) {
       menu.classList.add('active');
       content.classList.remove('active');
+      toggleBtn.innerHTML = '🧭';
     } else {
       menu.classList.remove('active');
       content.classList.add('active');
+      toggleBtn.innerHTML = '📝';
+      map.invalidateSize();
     }
   }
 }
@@ -50311,7 +50316,7 @@ function togglePane() {
 // Ensure correct pane is visible on resize
 window.addEventListener('resize', () => {
   const menu = document.getElementById('itinerary');
-  const content = document.getElementById('map');
+  const content = document.getElementById('content');
   if (window.innerWidth > 600) {
     menu.classList.add('active');
     content.classList.add('active');
@@ -50319,6 +50324,7 @@ window.addEventListener('resize', () => {
     togglePane();  // Refresh display
   }
 });
+
 </script>
 <script>
   document.getElementById('copy-btn').addEventListener('click', function () {
