@@ -88,9 +88,13 @@ with open(argv[1], 'r') as f:
             match = search(r'^- marker:([0-9.]*),([0-9.]*)\ (.*)', l)
 
             try:
-                i_md += '- ' + match.group(3) + '\n'
+                lat = match.group(1)
+                lng = match.group(2)
+                txt = match.group(3)
 
-                marker = {'lat': match.group(1), 'lng': match.group(2), 'txt': match.group(3)}
+                i_md += '- <a href="#" onclick="event.preventDefault();centerMapOnPoint(' + lat + ', ' + lng + ');">' +  txt + '</a>\n'
+
+                marker = {'lat': lat, 'lng': lng, 'txt': txt}
             except AttributeError as e:
                 print(l)
                 exit(1)
@@ -110,7 +114,16 @@ with open(argv[1], 'r') as f:
                     gpx_parsed = gpxpy.parse(gf)
 
                 distance_km = gpx_parsed.length_3d() / 1000  # or use length_2d() to ignore elevation
-                i_md += '- <a href="#" onclick="downloadtext(' + str(route_index) + ', \'' + file_name + '\')">' + file_name + '</a> ' + f'{distance_km:.1f}' + 'km\n'
+
+                uphill, downhill = gpx_parsed.get_uphill_downhill()
+
+                bounds = gpx_parsed.get_bounds()
+                leaflet_bounds = [
+                    [bounds.min_latitude, bounds.min_longitude],
+                    [bounds.max_latitude, bounds.max_longitude]
+                ]
+
+                i_md += f'- <a href="#" onclick="event.preventDefault();centerMapByBounds({leaflet_bounds})">{file_name}</a> {distance_km:.1f}km +{uphill:.0f}m/-{downhill:.0f}m' + ' <a href="#" onclick="event.preventDefault();downloadtext(' + str(route_index) + ', \'' + file_name + '\')">💾</a>\n'
 
             except AttributeError as e:
                 print(l)
@@ -170,6 +183,7 @@ font-size: 12px;
 h1 {
 margin-top: 0;
 color: #76AF5B;
+cursor: pointer;
 }
 h2 {
 margin: 1em 0 0 0;
@@ -215,7 +229,10 @@ width: 100%;
 height: 100vh;
 width: 100%;
 }
-
+a {
+text-decoration: none;
+color: blue;
+}
 .custom-marker {
 position: relative;
 width: 40px;
@@ -227,7 +244,6 @@ text-align: center;
 line-height: 20px;
 font-size: 13px;
 }
-
 .custom-marker span {
 position: absolute;
 top: 40%;
@@ -241,7 +257,6 @@ text-shadow:
 -2px 2px 0 white,
 2px 2px 0 white;
 }
-
 #map-cursor {
 position: absolute;
 top: 50%;
@@ -253,7 +268,6 @@ color: red;
 z-index: 1000; /* above map tiles */
 user-select: none;
 }
-
 #map-coords {
 position: absolute;
 bottom: 0;
@@ -267,7 +281,6 @@ padding: .2em;
 #copy-btn {
 cursor: pointer;
 }
-
 
 /* Mobile layout (below 600px) */
 @media (max-width: 600px) {
@@ -309,6 +322,32 @@ print('''
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.5.1/gpx.min.js"></script>
 <script>
+function toggleLiDisplayIfContainsDel() {
+  const listItems = document.querySelectorAll('li');
+
+  listItems.forEach(li => {
+    const delElem = li.querySelector('del');
+    if (delElem) {
+      // Toggle the li's display style between 'none' and 'inline'
+      if (li.style.display === 'none') {
+        li.style.display = 'list-item';
+      } else {
+        li.style.display = 'none';
+      }
+    }
+  });
+}
+
+function centerMapByBounds(bounds) {
+    // Leaflet expects bounds as LatLngBounds: [[southWest], [northEast]]
+    map.fitBounds(bounds);
+}
+
+function centerMapOnPoint(lat, lng) {
+    const currentZoom = map.getZoom();
+    map.setView([lat, lng], currentZoom, { animate: false });
+}
+
 function downloadtext(index, file_name) {
   const text = gpxTracks[index];
   const blob = new Blob([text], { type: 'text/plain' });
@@ -402,6 +441,14 @@ print('''
       if (loadedTracks === gpxTracks.length) {
         map.fitBounds(allBounds);
       }
+
+      // Make title center map to default
+      const savedCenter = map.getCenter();  // returns a LatLng object
+      const savedZoom = map.getZoom();
+      document.getElementsByTagName('H1')[0].addEventListener('click', function() {
+          map.setView(savedCenter, savedZoom);
+      });
+
     })
     .addTo(map);
   });

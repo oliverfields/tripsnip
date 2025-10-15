@@ -17,6 +17,7 @@ font-size: 12px;
 h1 {
 margin-top: 0;
 color: #76AF5B;
+cursor: pointer;
 }
 h2 {
 margin: 1em 0 0 0;
@@ -62,7 +63,10 @@ width: 100%;
 height: 100vh;
 width: 100%;
 }
-
+a {
+text-decoration: none;
+color: blue;
+}
 .custom-marker {
 position: relative;
 width: 40px;
@@ -74,7 +78,6 @@ text-align: center;
 line-height: 20px;
 font-size: 13px;
 }
-
 .custom-marker span {
 position: absolute;
 top: 40%;
@@ -88,7 +91,6 @@ text-shadow:
 -2px 2px 0 white,
 2px 2px 0 white;
 }
-
 #map-cursor {
 position: absolute;
 top: 50%;
@@ -100,7 +102,6 @@ color: red;
 z-index: 1000; /* above map tiles */
 user-select: none;
 }
-
 #map-coords {
 position: absolute;
 bottom: 0;
@@ -114,7 +115,6 @@ padding: .2em;
 #copy-btn {
 cursor: pointer;
 }
-
 
 /* Mobile layout (below 600px) */
 @media (max-width: 600px) {
@@ -148,23 +148,23 @@ display: block;
 </ul>
 <h2>Mon 30th Jun 2025, day 1</h2>
 <ul>
-<li>Tog til Gøteborg🚂</li>
-<li>Tog til Alingsås</li>
+<li><a href="#" onclick="event.preventDefault();centerMapOnPoint(59.2768, 11.6798);">Tog til Gøteborg🚂</a></li>
+<li><a href="#" onclick="event.preventDefault();centerMapOnPoint(59.2834, 11.4471);">Tog til Alingsås</a></li>
 <li>Book overnatting i Alingsås, 7 mulige🛏️</li>
-<li><a href="#" onclick="downloadtext(0, 'gotaleden.gpx')">gotaleden.gpx</a> 76.0km</li>
+<li><a href="#" onclick="event.preventDefault();centerMapByBounds([[57.6972383446991, 11.9691622629762], [57.9340678453445, 12.5335048232228]])">gotaleden.gpx</a> 76.0km +1774m/-1670m <a href="#" onclick="event.preventDefault();downloadtext(0, 'gotaleden.gpx')">💾</a></li>
 </ul>
 <h2>Tue 1st Jul 2025, day 2</h2>
 <ul>
 <li>Gå fra Alingsås til Norsesund, 15km (etappe 9 og 8)</li>
 <li>INGEN OVERNATTING:(</li>
-<li>Tog til Larvik🚂</li>
-<li><a href="#" onclick="downloadtext(1, 'day2.gpx')">day2.gpx</a> 0.2km</li>
+<li><a href="#" onclick="event.preventDefault();centerMapOnPoint(59.2768, 11.6798);">Tog til Larvik🚂</a></li>
+<li><a href="#" onclick="event.preventDefault();centerMapByBounds([[48.8606, 2.3376], [48.862, 2.34]])">day2.gpx</a> 0.2km +1m/-0m <a href="#" onclick="event.preventDefault();downloadtext(1, 'day2.gpx')">💾</a></li>
 </ul>
 <h2>Wed 2nd Jul 2025, day 3</h2>
 <ul>
 <li>Gå fra Skatås til Gøteborg 6km (etappe 1)</li>
 <li><del>Tog hjem</del></li>
-<li><a href="#" onclick="downloadtext(2, 'day3.gpx')">day3.gpx</a> 0.2km</li>
+<li><a href="#" onclick="event.preventDefault();centerMapByBounds([[48.8527, 2.3506], [48.854, 2.352]])">day3.gpx</a> 0.2km +1m/-0m <a href="#" onclick="event.preventDefault();downloadtext(2, 'day3.gpx')">💾</a></li>
 </ul>
 
 </div><!-- /menu -->
@@ -181,6 +181,32 @@ display: block;
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.5.1/gpx.min.js"></script>
 <script>
+function toggleLiDisplayIfContainsDel() {
+  const listItems = document.querySelectorAll('li');
+
+  listItems.forEach(li => {
+    const delElem = li.querySelector('del');
+    if (delElem) {
+      // Toggle the li's display style between 'none' and 'inline'
+      if (li.style.display === 'none') {
+        li.style.display = 'list-item';
+      } else {
+        li.style.display = 'none';
+      }
+    }
+  });
+}
+
+function centerMapByBounds(bounds) {
+    // Leaflet expects bounds as LatLngBounds: [[southWest], [northEast]]
+    map.fitBounds(bounds);
+}
+
+function centerMapOnPoint(lat, lng) {
+    const currentZoom = map.getZoom();
+    map.setView([lat, lng], currentZoom, { animate: false });
+}
+
 function downloadtext(index, file_name) {
   const text = gpxTracks[index];
   const blob = new Blob([text], { type: 'text/plain' });
@@ -50294,6 +50320,14 @@ http://www.topografix.com/GPX/1/1/gpx.xsd">
       if (loadedTracks === gpxTracks.length) {
         map.fitBounds(allBounds);
       }
+
+      // Make title center map to default
+      const savedCenter = map.getCenter();  // returns a LatLng object
+      const savedZoom = map.getZoom();
+      document.getElementsByTagName('H1')[0].addEventListener('click', function() {
+          map.setView(savedCenter, savedZoom);
+      });
+
     })
     .addTo(map);
   });
