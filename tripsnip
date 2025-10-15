@@ -6,8 +6,9 @@ from sys import argv, exit
 from re import search
 from datetime import date
 from markdown import markdown
-from os.path import dirname
+from os.path import dirname, join
 from os import chdir
+import gpxpy
 
 
 def print_leaflet_gpx_routes_js():
@@ -99,12 +100,17 @@ with open(argv[1], 'r') as f:
         elif l.startswith('- route:'):
             # format: ^- route:<file>
             match = search(r'^- route:(.*)', l)
+            gpx_file = match.group(1)
 
             try:
-                add_map_data(match.group(1), data_type='routes')
+                add_map_data(gpx_file, data_type='routes')
                 route_index += 1
-                file_name = match.group(1).strip()
-                i_md += '- <a href="#" onclick="downloadtext(' + str(route_index) + ', \'' + file_name + '\')">' + file_name + '</a>\n'
+                file_name = gpx_file.strip()
+                with open(join(dirname(argv[1]), gpx_file), 'r') as gf:
+                    gpx_parsed = gpxpy.parse(gf)
+
+                distance_km = gpx_parsed.length_3d() / 1000  # or use length_2d() to ignore elevation
+                i_md += '- <a href="#" onclick="downloadtext(' + str(route_index) + ', \'' + file_name + '\')">' + file_name + '</a> ' + f'{distance_km:.1f}' + 'km\n'
 
             except AttributeError as e:
                 print(l)
@@ -127,7 +133,7 @@ with open(argv[1], 'r') as f:
                         exit(1)
 
                 last_date = current_date
-                current_date_pretty = f'{current_date.strftime('%a')} {ordinal(current_date.day)} {current_date.strftime('%b %Y')}, day {day_count + 1}'
+                current_date_pretty = f"{current_date.strftime('%a')} {ordinal(current_date.day)} {current_date.strftime('%b %Y')}, day {day_count + 1}"
 
                 day_count += 1
 
