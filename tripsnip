@@ -85,7 +85,7 @@ with open(argv[1], 'r') as f:
             up, down = gpx.get_uphill_downhill()
             b = gpx.get_bounds()
             l_bounds = [[b.min_latitude, b.min_longitude], [b.max_latitude, b.max_longitude]]
-            i_md += f'- <a href="#" onclick="event.preventDefault();centerMapByBounds({l_bounds})">{gpx_file}</a> {dist:.1f}km +{up:.0f}m/-{down:.0f}m <a href="#" onclick="event.preventDefault();downloadtext({route_index}, \'{gpx_file}\')">💾</a>\n'
+            i_md += f'- <a href="#" onclick="event.preventDefault();centerMapByBounds({l_bounds})">{gpx_file}</a> {dist:.1f}km ↑{up:.0f}m/↓{down:.0f}m <a href="#" onclick="event.preventDefault();downloadtext({route_index}, \'{gpx_file}\')">💾</a>\n'
         elif l.startswith('## '):
             match = search(r'^##\ (\d{4})-(\d{2})-(\d{2})', l)
             if match:
