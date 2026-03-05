@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
-
 from sys import argv, exit
 from re import search
 from datetime import date
@@ -10,30 +9,25 @@ from os.path import dirname, join
 from os import chdir
 import gpxpy
 
-
 def print_leaflet_gpx_routes_js():
+    target_dir = dirname(argv[1])
+    if target_dir:
+        chdir(target_dir)
+
     g_js = ''
-
-    # gpx files are relative to the .trps file
-    chdir(dirname(argv[1]))
-
     for d in map_data.values():
         for r in d['routes']:
-            with open(r, 'r') as f:
+            with open(r.strip(), 'r') as f:
                 g_js += '`' + f.read() + '`,\n'
-
     print(g_js.rstrip(',\n'))
-
 
 def print_leaflet_markers_js():
     m_js = ''
-
     for d in map_data.values():
         for m in d['markers']:
-            m_js += '{ lat: ' + m['lat'] + ', lng: ' + m['lng'] + ", label: '" + m['txt'] + "', icon: '🤩' },\n"
-
+            clean_txt = m['txt'].replace("'", "\\'")
+            m_js += "{ lat: " + m['lat'] + ", lng: " + m['lng'] + ", label: '" + clean_txt + "' },\n"
     print(m_js.rstrip(',\n'))
-
 
 def ordinal(n):
     if 10 <= n % 100 <= 20:
@@ -42,492 +36,216 @@ def ordinal(n):
         suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
     return f"{n}{suffix}"
 
-
 def add_map_data(data_content, data_type='markers'):
     if not day_count in map_data.keys():
         map_data[day_count] = {'markers': [], 'routes': [], 'todos': [], 'dones': [], 'date_pretty': current_date_pretty}
+    map_data[day_count][data_type].append(data_content)
 
-    try:
-        map_data[day_count][data_type].append(data_content)
-    except KeyError:
-        print('Illegal data_type: ' + data_type)
-        exit(1)
-
-routes = [] # gpx file paths
-i_md = '' # itinenary markdown
+i_md = '' 
 day_count = 0
 current_date = False
 current_date_pretty = False
 last_date = False
-map_data = {} # markers, routes etc for drawing map
+map_data = {} 
 page_title = 'Tripsnip'
 route_index = -1
 
-
 if len(argv) != 2:
-    print("Usage: tripsnip <tripsnip flavour markdown file>")
+    print("Usage: tripsnip <file.trps>")
     exit(1)
-
 
 with open(argv[1], 'r') as f:
     for l in f:
         l = l.strip()
-
-        # parse line for tripsnip stuff
+        if not l: continue
 
         if l.startswith('- todo:'):
-            i_md += '- ' + l.lstrip('- todo:') + '\n'
-            add_map_data(l.strip('- todo:'), data_type='todos')
-
+            content = l.replace('- todo:', '', 1).strip()
+            i_md += f'- {content}\n'
+            add_map_data(content, data_type='todos')
         elif l.startswith('- done:'):
-            i_md += '- <del>' + l.lstrip('- done:') + '</del>\n'
-            add_map_data(l.strip('- done:'), data_type='dones')
-
+            content = l.replace('- done:', '', 1).strip()
+            i_md += f'- <del>{content}</del>\n'
+            add_map_data(content, data_type='dones')
         elif l.startswith('- marker:'):
-            # format: ^- marker:<lat>,<lng> <name>
-            match = search(r'^- marker:([0-9.]*),([0-9.]*)\ (.*)', l)
-
-            try:
-                lat = match.group(1)
-                lng = match.group(2)
-                txt = match.group(3)
-
-                i_md += '- <a href="#" onclick="event.preventDefault();centerMapOnPoint(' + lat + ', ' + lng + ');">' +  txt + '</a>\n'
-
-                marker = {'lat': lat, 'lng': lng, 'txt': txt}
-            except AttributeError as e:
-                print(l)
-                exit(1)
-
-            add_map_data(marker, data_type='markers')
-
-        elif l.startswith('- route:'):
-            # format: ^- route:<file>
-            match = search(r'^- route:(.*)', l)
-            gpx_file = match.group(1)
-
-            try:
-                add_map_data(gpx_file, data_type='routes')
-                route_index += 1
-                file_name = gpx_file.strip()
-                with open(join(dirname(argv[1]), gpx_file), 'r') as gf:
-                    gpx_parsed = gpxpy.parse(gf)
-
-                distance_km = gpx_parsed.length_3d() / 1000  # or use length_2d() to ignore elevation
-
-                uphill, downhill = gpx_parsed.get_uphill_downhill()
-
-                bounds = gpx_parsed.get_bounds()
-                leaflet_bounds = [
-                    [bounds.min_latitude, bounds.min_longitude],
-                    [bounds.max_latitude, bounds.max_longitude]
-                ]
-
-                i_md += f'- <a href="#" onclick="event.preventDefault();centerMapByBounds({leaflet_bounds})">{file_name}</a> {distance_km:.1f}km +{uphill:.0f}m/-{downhill:.0f}m' + ' <a href="#" onclick="event.preventDefault();downloadtext(' + str(route_index) + ', \'' + file_name + '\')">💾</a>\n'
-
-            except AttributeError as e:
-                print(l)
-                exit(1)
-
-        elif l.startswith('## '):
-            match = search(r'^##\ ([0-9]{4})-([0-9]{2})-([0-9]{2})', l)
-
+            match = search(r'^- marker:([0-9.-]+),([0-9.-]+)\s+(.*)', l)
             if match:
-                year = int(match.group(1))
-                month = int(match.group(2))
-                day = int(match.group(3))
-
-                current_date = date(year, month, day)
-
-                # verify dates are consecutive
-                if last_date:
-                    if abs((current_date - last_date).days) != 1:
-                        print(f'Non consecutive dates: {last_date} and {current_date}')
-                        exit(1)
-
-                last_date = current_date
-                current_date_pretty = f"{current_date.strftime('%a')} {ordinal(current_date.day)} {current_date.strftime('%b %Y')}, day {day_count + 1}"
-
-                day_count += 1
-
-                i_md += f'## {current_date_pretty}\n'
+                lat, lng, txt = match.groups()
+                i_md += f'- <a href="#" onclick="event.preventDefault();centerMapOnPoint({lat}, {lng});">{txt}</a>\n'
+                add_map_data({'lat': lat, 'lng': lng, 'txt': txt}, data_type='markers')
             else:
-                i_md += l + '\n'
-
+                print(f"Malformed marker line: {l}"); exit(1)
+        elif l.startswith('- route:'):
+            gpx_file = l.replace('- route:', '', 1).strip()
+            add_map_data(gpx_file, data_type='routes')
+            route_index += 1
+            with open(join(dirname(argv[1]), gpx_file), 'r') as gf:
+                gpx = gpxpy.parse(gf)
+            dist = gpx.length_3d() / 1000
+            up, down = gpx.get_uphill_downhill()
+            b = gpx.get_bounds()
+            l_bounds = [[b.min_latitude, b.min_longitude], [b.max_latitude, b.max_longitude]]
+            i_md += f'- <a href="#" onclick="event.preventDefault();centerMapByBounds({l_bounds})">{gpx_file}</a> {dist:.1f}km +{up:.0f}m/-{down:.0f}m <a href="#" onclick="event.preventDefault();downloadtext({route_index}, \'{gpx_file}\')">💾</a>\n'
+        elif l.startswith('## '):
+            match = search(r'^##\ (\d{4})-(\d{2})-(\d{2})', l)
+            if match:
+                y, m, d = map(int, match.groups())
+                current_date = date(y, m, d)
+                last_date = current_date
+                current_date_pretty = f"{current_date.strftime('%a')} {ordinal(current_date.day)} {current_date.strftime('%b %Y')}, Day {day_count + 1}"
+                day_count += 1
+                i_md += f'## {current_date_pretty}\n'
+            else: i_md += l + '\n'
         elif l.startswith('# '):
             page_title = l.lstrip('# ') + ' - Tripsnip'
             i_md += l + '\n'
+        else: i_md += l + '\n'
 
-        else:
-            i_md += l + '\n'
-
-#import pprint
-#pprint.pprint(map_data)
-
-print('''
-<!DOCTYPE html>
-<html lang="en">
+# Use a standard string (no f-prefix) to avoid brace conflicts
+html_template = '''<!DOCTYPE html>
+<html>
 <head>
 <meta charset="UTF-8">
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64, PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPCEtLSBHZW5lcmF0b3I6IEFkb2JlIElsbHVzdHJhdG9yIDIxLjAuMCwgU1ZHIEV4cG9ydCBQbHVnLUluIC4gU1ZHIFZlcnNpb246IDYuMDAgQnVpbGQgMCkgIC0tPgo8c3ZnIHZlcnNpb249IjEuMSIgaWQ9IkxheWVyXzEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIHg9IjBweCIgeT0iMHB4IgoJIHZpZXdCb3g9IjAgMCAxMjggMTI4IiBzdHlsZT0iZW5hYmxlLWJhY2tncm91bmQ6bmV3IDAgMCAxMjggMTI4OyIgeG1sOnNwYWNlPSJwcmVzZXJ2ZSI+CjxzdHlsZSB0eXBlPSJ0ZXh0L2NzcyI+Cgkuc3Qwe2ZpbGw6I0NGRjFGQjt9Cgkuc3Qxe2ZpbGw6IzkxREVGNTt9Cgkuc3Qye2ZpbGw6I0Y2RjdGNzt9Cgkuc3Qze2ZpbGw6I0ZGQ0ZCODt9Cgkuc3Q0e2ZpbGw6I0ZGQTc3Qjt9Cgkuc3Q1e2ZpbGw6I0U5RUFFQjt9Cgkuc3Q2e2ZpbGw6Izc0Njg4Nzt9Cgkuc3Q3e2ZpbGw6I0Y5ODc3MDt9Cgkuc3Q4e2ZpbGw6IzlCOUI5Qjt9Cgkuc3Q5e2ZpbGw6I0ZGRERDRjt9Cgkuc3QxMHtmaWxsOiNGRkZGRkY7fQoJLnN0MTF7ZmlsbDojQjdCN0I3O30KCS5zdDEye2ZpbGw6I0ZGQkM5OTt9Cgkuc3QxM3tmaWxsOiNEQkRDREU7fQoJLnN0MTR7ZmlsbDojRkVDRkJBO30KCS5zdDE1e2ZpbGw6I0QwRjFGQTt9Cgkuc3QxNntmaWxsOiNGREE3N0Y7fQoJLnN0MTd7ZmlsbDojOTRERUY0O30KPC9zdHlsZT4KPGc+Cgk8Zz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNMTA4LjU4LDQ0LjQ2OUg4NC4wMzVDNzcuMTg4LDU5Ljc4LDY0LDY3LjU1LDY0LDY3LjU1cy0xMy4xODgtNy43Ny0yMC4wMzUtMjMuMDgxSDE5LjQyCgkJCWMtMS42MTUsMC0yLjkyMywxLjMxMi0yLjkyMywyLjkzdjc2LjE3MmMwLDEuNjE4LDEuMzA5LDIuOTMsMi45MjMsMi45M2g4OS4xNmMxLjYxNSwwLDIuOTIzLTEuMzEyLDIuOTIzLTIuOTNWNDcuMzk4CgkJCUMxMTEuNTAzLDQ1Ljc4LDExMC4xOTUsNDQuNDY5LDEwOC41OCw0NC40Njl6Ii8+CgkJPHBhdGggY2xhc3M9InN0NCIgZD0iTTEwOC41OCw0NC40NjlIODQuMDM1Qzc3LjE4OCw1OS43OCw2NCw2Ny41NSw2NCw2Ny41NXMtMTMuMTg4LTcuNzctMjAuMDM1LTIzLjA4MUgxOS40MgoJCQljLTEuNjE1LDAtMi45MjMsMS4zMTItMi45MjMsMi45M3YzMi4xNjdoOTUuMDA3VjQ3LjM5OEMxMTEuNTAzLDQ1Ljc4LDExMC4xOTUsNDQuNDY5LDEwOC41OCw0NC40Njl6Ii8+CgkJPHBhdGggY2xhc3M9InN0MyIgZD0iTTYxLjYyNSw5NC4xMzJIMjkuMzIzYy0xLjU3NCwwLTIuODUsMS4yNzktMi44NSwyLjg1NnYxLjg5OWMwLDEuNTc4LDEuMjc2LDIuODU2LDIuODUsMi44NTZoMzIuMzAyCgkJCWMxLjU3NCwwLDIuODUtMS4yNzksMi44NS0yLjg1NnYtMS44OTlDNjQuNDc1LDk1LjQxMSw2My4xOTksOTQuMTMyLDYxLjYyNSw5NC4xMzJ6Ii8+CgkJPHBhdGggY2xhc3M9InN0MyIgZD0iTTYxLjYyNSwxMDkuMzYxSDI5LjMyM2MtMS41NzQsMC0yLjg1LDEuMjc5LTIuODUsMi44NTZ2MS44OTljMCwxLjU3OCwxLjI3NiwyLjg1NiwyLjg1LDIuODU2aDMyLjMwMgoJCQljMS41NzQsMCwyLjg1LTEuMjc5LDIuODUtMi44NTZ2LTEuODk5QzY0LjQ3NSwxMTAuNjQsNjMuMTk5LDEwOS4zNjEsNjEuNjI1LDEwOS4zNjF6Ii8+CgkJPHBhdGggY2xhc3M9InN0MCIgZD0iTTY0LjAzMSwxLjVjLTEzLjI4NiwwLTI0LjA5Miw5LjkyOC0yNC4wOTIsMjQuMTE0QzM5LjkzOSw1My4zOTYsNjQsNjcuNTUsNjQsNjcuNTUKCQkJczI0LjA2MS0xNC4xNTMsMjQuMDYxLTQxLjkzNkM4OC4wNjEsMTEuNDI4LDc3LjMxNywxLjUsNjQuMDMxLDEuNXoiLz4KCQk8ZWxsaXBzZSBjbGFzcz0ic3QyIiBjeD0iNjQiIGN5PSIyNy43MSIgcng9IjExLjUwNyIgcnk9IjExLjUzMyIvPgoJPC9nPgoJPGc+CgkJPHBhdGggY2xhc3M9InN0NyIgZD0iTTEwOC41OCw0Mi45NjlIODQuMDM1Yy0wLjU5LDAtMS4xMjQsMC4zNDctMS4zNjYsMC44ODdDNzcuMDQsNTYuNDQ0LDY2Ljg1Myw2My44NzIsNjQsNjUuNzcxCgkJCWMtMi44NTMtMS44OTktMTMuMDM5LTkuMzI2LTE4LjY3LTIxLjkxNWMtMC4yNDEtMC41NC0wLjc3Ni0wLjg4Ny0xLjM2Ni0wLjg4N0gxOS40MmMtMi40MzcsMC00LjQyLDEuOTg3LTQuNDIsNC40M3YzMi4xNjcKCQkJYzAsMC44MjgsMC42NywxLjUsMS40OTcsMS41aDljMC44MjcsMCwxLjQ5Ny0wLjY3MiwxLjQ5Ny0xLjVzLTAuNjctMS41LTEuNDk3LTEuNWgtNy41MDNWNDcuMzk4YzAtMC43ODksMC42NC0xLjQzLDEuNDI3LTEuNDMKCQkJaDIzLjU4NkM1MC4wNiw2MC45NSw2Mi42OTcsNjguNTIyLDYzLjI0MSw2OC44NDNjMC40NjksMC4yNzUsMS4wNDgsMC4yNzUsMS41MTcsMGMwLjU0NC0wLjMyLDEzLjE4Mi03Ljg5MywyMC4yMzUtMjIuODc0aDIzLjU4NgoJCQljMC43ODYsMCwxLjQyNywwLjY0MSwxLjQyNywxLjQzdjMwLjY2N0gzMy4xODFjLTAuODI3LDAtMS40OTcsMC42NzItMS40OTcsMS41czAuNjcsMS41LDEuNDk3LDEuNWg3OC4zMjIKCQkJYzAuODI2LDAsMS40OTctMC42NzIsMS40OTctMS41VjQ3LjM5OEMxMTMsNDQuOTU2LDExMS4wMTcsNDIuOTY5LDEwOC41OCw0Mi45Njl6Ii8+CgkJPHBhdGggY2xhc3M9InN0NiIgZD0iTTEwOC41OCw0Mi45NjlIODQuMDM1Yy0wLjU5LDAtMS4xMjQsMC4zNDctMS4zNjYsMC44ODdDNzcuMDQsNTYuNDQ0LDY2Ljg1Myw2My44NzIsNjQsNjUuNzcxCgkJCWMtMi44NTMtMS44OTktMTMuMDM5LTkuMzI2LTE4LjY3LTIxLjkxNWMtMC4yNDEtMC41NC0wLjc3Ni0wLjg4Ny0xLjM2Ni0wLjg4N0gxOS40MmMtMi40MzcsMC00LjQyLDEuOTg3LTQuNDIsNC40M3Y3Ni4xNzIKCQkJYzAsMi40NDIsMS45ODMsNC40Myw0LjQyLDQuNDNoODkuMTZjMi40MzcsMCw0LjQyLTEuOTg3LDQuNDItNC40M3YtOC4yNDRjMC0wLjgyOC0wLjY3LTEuNS0xLjQ5Ny0xLjUKCQkJYy0wLjgyNiwwLTEuNDk3LDAuNjcyLTEuNDk3LDEuNXY4LjI0NGMwLDAuNzg4LTAuNjQsMS40My0xLjQyNywxLjQzSDE5LjQyYy0wLjc4NiwwLTEuNDI3LTAuNjQyLTEuNDI3LTEuNDNWNDcuMzk4CgkJCWMwLTAuNzg5LDAuNjQtMS40MywxLjQyNy0xLjQzaDIzLjU4NkM1MC4wNiw2MC45NSw2Mi42OTcsNjguNTIyLDYzLjI0MSw2OC44NDNjMC40NjksMC4yNzUsMS4wNDgsMC4yNzUsMS41MTcsMAoJCQljMC41NDQtMC4zMiwxMy4xODItNy44OTMsMjAuMjM1LTIyLjg3NGgyMy41ODZjMC43ODYsMCwxLjQyNywwLjY0MSwxLjQyNywxLjQzdjU5Ljk4N2MwLDAuODI4LDAuNjcsMS41LDEuNDk3LDEuNQoJCQljMC44MjYsMCwxLjQ5Ny0wLjY3MiwxLjQ5Ny0xLjVWNDcuMzk4QzExMyw0NC45NTYsMTExLjAxNyw0Mi45NjksMTA4LjU4LDQyLjk2OXoiLz4KCQk8cGF0aCBjbGFzcz0ic3Q2IiBkPSJNNjEuNjI1LDkyLjYzM0gyOS4zMjNjLTIuMzk3LDAtNC4zNDcsMS45NTQtNC4zNDcsNC4zNTZ2MS44OThjMCwyLjQwMiwxLjk1LDQuMzU2LDQuMzQ3LDQuMzU2aDMyLjMwMgoJCQljMi4zOTcsMCw0LjM0Ny0xLjk1NCw0LjM0Ny00LjM1NnYtMS44OThDNjUuOTcyLDk0LjU4Nyw2NC4wMjIsOTIuNjMzLDYxLjYyNSw5Mi42MzN6IE02Mi45NzgsOTguODg4CgkJCWMwLDAuNzQ4LTAuNjA3LDEuMzU2LTEuMzUzLDEuMzU2SDI5LjMyM2MtMC43NDYsMC0xLjM1My0wLjYwOC0xLjM1My0xLjM1NnYtMS44OThjMC0wLjc0OCwwLjYwNy0xLjM1NiwxLjM1My0xLjM1NmgzMi4zMDIKCQkJYzAuNzQ2LDAsMS4zNTMsMC42MDgsMS4zNTMsMS4zNTZWOTguODg4eiIvPgoJCTxwYXRoIGNsYXNzPSJzdDYiIGQ9Ik02MS42MjUsMTA3Ljg2MUgyOS4zMjNjLTIuMzk3LDAtNC4zNDcsMS45NTQtNC4zNDcsNC4zNTZ2MS44OThjMCwyLjQwMiwxLjk1LDQuMzU2LDQuMzQ3LDQuMzU2aDMyLjMwMgoJCQljMi4zOTcsMCw0LjM0Ny0xLjk1NCw0LjM0Ny00LjM1NnYtMS44OThDNjUuOTcyLDEwOS44MTUsNjQuMDIyLDEwNy44NjEsNjEuNjI1LDEwNy44NjF6IE02Mi45NzgsMTE0LjExNgoJCQljMCwwLjc0OC0wLjYwNywxLjM1Ni0xLjM1MywxLjM1NkgyOS4zMjNjLTAuNzQ2LDAtMS4zNTMtMC42MDgtMS4zNTMtMS4zNTZ2LTEuODk4YzAtMC43NDgsMC42MDctMS4zNTYsMS4zNTMtMS4zNTZoMzIuMzAyCgkJCWMwLjc0NiwwLDEuMzUzLDAuNjA4LDEuMzUzLDEuMzU2VjExNC4xMTZ6Ii8+CgkJPHBhdGggY2xhc3M9InN0NiIgZD0iTTY0LjAzMSwwQzQ5LjQ0NCwwLDM4LjQ0MywxMS4wMTEsMzguNDQzLDI1LjYxM2MwLDI4LjMxNCwyNC41NTIsNDMuMDg0LDI0LjgsNDMuMjMKCQkJYzAuMjM0LDAuMTM4LDAuNDk2LDAuMjA2LDAuNzU4LDAuMjA2czAuNTI0LTAuMDY4LDAuNzU4LTAuMjA2YzAuMjQ4LTAuMTQ2LDI0LjgtMTQuOTE2LDI0LjgtNDMuMjMKCQkJQzg5LjU1NywxMS4wMTEsNzguNTgzLDAsNjQuMDMxLDB6IE02My45OTksNjUuNzcxYy00LjAxNS0yLjY2OS0yMi41NjItMTYuMzAxLTIyLjU2Mi00MC4xNTdDNDEuNDM2LDEyLjcyMiw1MS4xNSwzLDY0LjAzMSwzCgkJCWMxMi44NDYsMCwyMi41MzMsOS43MjIsMjIuNTMzLDIyLjYxM0M4Ni41NjQsNDkuNDI3LDY4LjAxLDYzLjA5Niw2My45OTksNjUuNzcxeiIvPgoJCTxwYXRoIGNsYXNzPSJzdDciIGQ9Ik02OC4xNzgsMTUuMzc2Yy0wLjc4Mi0wLjI2OC0xLjYzMywwLjE1NS0xLjg5OCwwLjkzOWMtMC4yNjUsMC43ODQsMC4xNTQsMS42MzYsMC45MzcsMS45MDIKCQkJYzQuMDYyLDEuMzgxLDYuNzkzLDUuMTk2LDYuNzkzLDkuNDk0YzAsNS41MzItNC40OSwxMC4wMzItMTAuMDEsMTAuMDMycy0xMC4wMTEtNC41LTEwLjAxMS0xMC4wMzIKCQkJYzAtNC4yNjYsMi43MDUtOC4wNzEsNi43MjktOS40N2MwLjc4MS0wLjI3MSwxLjE5NS0xLjEyNSwwLjkyNC0xLjkwOHMtMS4xMjUtMS4xOTktMS45MDQtMC45MjYKCQkJYy01LjIyOSwxLjgxNy04Ljc0Myw2Ljc2Mi04Ljc0MywxMi4zMDRjMCw3LjE4Niw1LjgzNCwxMy4wMzIsMTMuMDA0LDEzLjAzMmM3LjE3LDAsMTMuMDA0LTUuODQ2LDEzLjAwNC0xMy4wMzIKCQkJQzc3LjAwNCwyMi4xMjYsNzMuNDU3LDE3LjE2OSw2OC4xNzgsMTUuMzc2eiIvPgoJPC9nPgo8L2c+CjxnPgo8L2c+Cjwvc3ZnPgo=">''')
-print(f'<title>{page_title}</title>')
-print('''
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>{title}</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 <style>
-body {
-margin: 0;
-font-family: sans-serif;
-font-size: 12px;
-}
-h1 {
-margin-top: 0;
-color: #76AF5B;
-cursor: pointer;
-}
-h2 {
-margin: 1em 0 0 0;
-color: #465068;
-}
-del {
-opacity: .4;
-}
-ul {
-margin-top: .5em;
-padding-left: 1em;
-}
-li {
-margin-bottom: .5em;
-}
-.container {
-display: flex;
-height: 100vh;
-}
-.pane {
-box-sizing: border-box;
-overflow-y: auto;
-}
-.menu {
-padding: 1em;
-width: 30%;
-}
-.content {
-background: #fff;
-width: 70%;
-position: relative;
-}
-/* Hide toggle button on wide screens */
-#toggle-btn {
-display: none;
-padding: .4em;
-background: #333;
-color: white;
-border: none;
-width: 100%;
-}
-#map {
-height: 100vh;
-width: 100%;
-}
-a {
-text-decoration: none;
-color: blue;
-}
-.custom-marker {
-position: relative;
-width: 40px;
-height: 40px;
-background-image: url('data:image/svg+xml,<%3Fxml version="1.0" encoding="UTF-8"%3F><svg width="800px" height="800px" viewBox="0 0 15 15" version="1.1" id="marker" xmlns="http://www.w3.org/2000/svg"><path fill="salmon" id="path4133" d="M7.5,0C5.0676,0,2.2297,1.4865,2.2297,5.2703&%23xA;&%23x9;C2.2297,7.8378,6.2838,13.5135,7.5,15c1.0811-1.4865,5.2703-7.027,5.2703-9.7297C12.7703,1.4865,9.9324,0,7.5,0z"/></svg>');
-background-size: cover;
-background-repeat: no-repeat;
-text-align: center;
-line-height: 20px;
-font-size: 13px;
-}
-.custom-marker span {
-position: absolute;
-top: 40%;
-left: 50%;
-transform: translate(-50%, -50%);
-pointer-events: none;
-color: white;
-text-shadow:
--2px -2px 0 white,
-2px -2px 0 white,
--2px 2px 0 white,
-2px 2px 0 white;
-}
-#map-cursor {
-position: absolute;
-top: 50%;
-left: 50%;
-transform: translate(-50%, -50%);
-pointer-events: none;
-font-size: 24px;
-color: red;
-z-index: 1000; /* above map tiles */
-user-select: none;
-}
-#map-coords {
-position: absolute;
-bottom: 0;
-left: 0;
-color: black;
-background-color: rgba(255, 255, 255, 0.8);
-z-index: 1000; /* above map tiles */
-font-size: 10px;
-padding: .2em;
-}
-#copy-btn {
-cursor: pointer;
-}
+    body {{ margin: 0; font-family: sans-serif; font-size: 13px; overflow: hidden; background: white; }}
+    h1 {{ color: #76AF5B; cursor: pointer; margin-top: 0; }}
+    .container {{ display: flex; height: 100vh; width: 100vw; }}
+    .menu {{ width: 35%; padding: 25px; overflow-y: auto; box-sizing: border-box; background: white; border-right: 1px solid #eee; }}
+    .content {{ width: 65%; position: relative; height: 100%; }}
+    #map {{ height: 100%; width: 100%; background: #f0f0f0; }}
+    
+    #fab {{
+        display: none; 
+        position: fixed; 
+        bottom: 30px; 
+        left: 50%; 
+        transform: translateX(-50%); /* This centers it perfectly */
+        z-index: 3000; 
+        width: 60px; 
+        height: 60px; 
+        border-radius: 50%; 
+        background: white; /* Changed to white */
+        cursor: pointer; 
+        font-size: 28px; 
+        align-items: center; 
+        justify-content: center; 
+        outline: none;
+        border: none;
+    }}
+    .custom-marker {{ position: relative; width: 40px; height: 40px; background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15 15"><path fill="salmon" d="M7.5,0C5.1,0,2.2,1.5,2.2,5.3C2.2,7.8,6.3,13.5,7.5,15c1.1-1.5,5.3-7,5.3-9.7C12.8,1.5,9.9,0,7.5,0z"/></svg>'); background-size: contain; background-repeat: no-repeat; }}
+    .custom-marker span {{ position: absolute; top: 35%; left: 50%; transform: translate(-50%, -50%); font-size: 16px; }}
+    #map-coords {{ position: absolute; bottom: 10px; left: 10px; background: rgba(255,255,255,0.8); padding: 5px; z-index: 1000; font-family: monospace; border-radius: 3px; font-size: 11px; pointer-events: none; }}
 
-/* Mobile layout (below 600px) */
-@media (max-width: 600px) {
-.container {
-flex-direction: column;
-}
-.pane {
-width: 100%;
-display: none;
-}
-.pane.active {
-display: block;
-}
-#toggle-btn {
-display: block;
-}
-} /* @media mobile */
+    @media (max-width: 768px) {{ 
+        #fab {{ display: flex; }}
+        .menu, .content {{ width: 100%; position: absolute; top: 0; left: 0; height: 100%; transition: opacity 0.2s; }}
+        .hidden {{ opacity: 0; pointer-events: none; z-index: 0; }}
+        .visible {{ opacity: 1; pointer-events: auto; z-index: 1000; }}
+    }}
 </style>
 </head>
 <body>
-<button id="toggle-btn" onclick="togglePane()">📄</button>
-
+<button id="fab" onclick="toggleView()">🗺️</button>
 <div class="container">
-<div class="pane menu active" id="itinerary">
-''')
-print(markdown(i_md))
-print('''
-</div><!-- /menu -->
-<div id="content" class="pane content">
-  <div id="map"></div>
-  <div id="map-cursor">+</div>
-  <div id="map-coords">
-    <span id="coords"></span>
-    <span id="copy-btn" title="Copy to clipboard: Ctrl + Shift + C">📋</span>
-  </div>
-</div><!-- /content -->
-</div><!-- /container -->
-
+    <div id="itinerary" class="menu visible">{body}</div>
+    <div id="map-pane" class="content hidden"><div id="map"></div><div id="map-coords"><span id="coords"></span> <span id="copy-btn" style="cursor:pointer; pointer-events: auto;">📋</span></div></div>
+</div>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.5.1/gpx.min.js"></script>
 <script>
-function toggleLiDisplayIfContainsDel() {
-  const listItems = document.querySelectorAll('li');
+    const map = L.map('map', {{ zoomControl: false }}).setView([0,0], 2);
+    L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png').addTo(map);
+    const allBounds = L.latLngBounds([]);
 
-  listItems.forEach(li => {
-    const delElem = li.querySelector('del');
-    if (delElem) {
-      // Toggle the li's display style between 'none' and 'inline'
-      if (li.style.display === 'none') {
-        li.style.display = 'list-item';
-      } else {
-        li.style.display = 'none';
-      }
-    }
-  });
-}
+    function getEmoji(str) {{
+        const match = str.match(/(\\p{{Extended_Pictographic}})/u);
+        return match ? match[1] : '';
+    }}
+'''
 
-function centerMapByBounds(bounds) {
-    // Leaflet expects bounds as LatLngBounds: [[southWest], [northEast]]
-    map.fitBounds(bounds);
-}
+print(html_template.format(title=page_title, body=markdown(i_md)))
 
-function centerMapOnPoint(lat, lng) {
-    const currentZoom = map.getZoom();
-    map.setView([lat, lng], currentZoom, { animate: false });
-}
-
-function downloadtext(index, file_name) {
-  const text = gpxTracks[index];
-  const blob = new Blob([text], { type: 'text/plain' });
-  const url = URL.createObjectURL(blob);
-
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${file_name}`; // Set download file name
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-
-  // Clean up the object URL
-  URL.revokeObjectURL(url);
-}
-
-
-function getTrailingEmoji(str) {
-  // Use Unicode property escape for emojis
-  // This regex looks for a single emoji at the end of the string
-  const regex = /(\\p{Extended_Pictographic})\\s*$/u;
-
-  const match = str.match(regex);
-  return match ? match[1] : '';
-}
-
-
- // Initialize the map
-const map = L.map('map', {
-  center: [48.8566, 2.3522],
-  zoom: 13,
-  zoomControl: false
-});
-
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors'
-  }).addTo(map);
-
-  // Master bounds object
-  const allBounds = L.latLngBounds([]);
-
-  // Marker data
-  const markerData = [
-''')
+print('const markers = [')
 print_leaflet_markers_js()
-print('''
-];
+print('];')
 
-// Add markers and expand bounds
-  markerData.forEach(({ lat, lng, label}) => {
-    const markerIcon = L.divIcon({
-      className: '',
-      html: `<div class="custom-marker"><span>` + getTrailingEmoji(label) + `</span></div>`,
-      iconSize: [40, 40],
-      iconAnchor: [20, 40],
+print('''
+    markers.forEach(m => {
+        const emoji = getEmoji(m.label);
+        const icon = L.divIcon({ 
+            className: '', 
+            html: `<div class="custom-marker"><span>${emoji}</span></div>`, 
+            iconSize: [40, 40], iconAnchor: [20, 40] 
+        });
+        L.marker([m.lat, m.lng], {icon}).addTo(map).bindTooltip(m.label);
+        allBounds.extend([m.lat, m.lng]);
     });
 
-    const marker = L.marker([lat, lng], { icon: markerIcon }).addTo(map)
-      .bindTooltip(label, { direction: 'top' });
-    allBounds.extend([lat, lng]);
-  });
-
-  // GPX tracks as inline strings
-  const gpxTracks = [
+    const gpxData = [
 ''')
 print_leaflet_gpx_routes_js()
+print('];')
+
 print('''
-];
-
-
-  let loadedTracks = 0;
-
-  // Load GPX routes
-  gpxTracks.forEach(gpxString => {
-    const blob = new Blob([gpxString], { type: 'application/gpx+xml' });
-    const url = URL.createObjectURL(blob);
-
-    new L.GPX(url, {
-      async: true,
-      marker_options: {
-        startIconUrl: null,
-        endIconUrl: null,
-        shadowUrl: null
-      }
-    })
-    .on('loaded', function(e) {
-      allBounds.extend(e.target.getBounds());
-      loadedTracks++;
-
-      // Once all tracks are loaded, fit map to total bounds
-      if (loadedTracks === gpxTracks.length) {
-        map.fitBounds(allBounds);
-      }
-
-      // Make title center map to default
-      const savedCenter = map.getCenter();  // returns a LatLng object
-      const savedZoom = map.getZoom();
-      document.getElementsByTagName('H1')[0].addEventListener('click', function() {
-          map.setView(savedCenter, savedZoom);
-      });
-
-    })
-    .addTo(map);
-  });
-
-// Function to update the center coordinates
-function updateCenterCoords() {
-  const center = map.getCenter();
-  document.getElementById('coords').innerText =
-    `${center.lat.toFixed(6)},${center.lng.toFixed(6)}`;
-}
-
-// Initial update
-updateCenterCoords();
-
-// Update on move or zoom
-map.on('move', updateCenterCoords);
-map.on('zoom', updateCenterCoords);
-
-let showingMenu = true;
-
-function togglePane() {
-  const menu = document.getElementById('itinerary');
-  const content = document.getElementById('content');
-  const toggleBtn = document.getElementById('toggle-btn');
-
-  showingMenu = !showingMenu;
-
-  if (window.innerWidth <= 600) {
-    if (showingMenu) {
-      menu.classList.add('active');
-      content.classList.remove('active');
-      toggleBtn.innerHTML = '🧭';
-    } else {
-      menu.classList.remove('active');
-      content.classList.add('active');
-      toggleBtn.innerHTML = '📝';
-      map.invalidateSize();
-    }
-  }
-}
-
-// Ensure correct pane is visible on resize
-window.addEventListener('resize', () => {
-  const menu = document.getElementById('itinerary');
-  const content = document.getElementById('content');
-  if (window.innerWidth > 600) {
-    menu.classList.add('active');
-    content.classList.add('active');
-  } else {
-    togglePane();  // Refresh display
-  }
-});
-
-</script>
-<script>
-  document.getElementById('copy-btn').addEventListener('click', function () {
-    const coords = document.getElementById('coords').textContent;
-    navigator.clipboard.writeText(coords).then(() => {
-      // Optional: feedback (brief icon/text change)
-      const btn = this;
-      const original = btn.textContent;
-      btn.textContent = '✅';
-      setTimeout(() => btn.textContent = original, 1000);
+    let loaded = 0;
+    gpxData.forEach(xml => {
+        const url = URL.createObjectURL(new Blob([xml], {type: 'application/gpx+xml'}));
+        new L.GPX(url, { async: true, marker_options: { startIconUrl: null, endIconUrl: null, shadowUrl: null } })
+        .on('loaded', e => {
+            allBounds.extend(e.target.getBounds());
+            map.fitBounds(allBounds, {padding: [30, 30]});
+            loaded++;
+            if(loaded === gpxData.length) {
+                const c = map.getCenter(), z = map.getZoom();
+                const h1 = document.querySelector('h1');
+                if(h1) h1.onclick = () => map.setView(c, z);
+            }
+        }).addTo(map);
     });
-  });
 
+    if(markers.length > 0 && gpxData.length === 0) map.fitBounds(allBounds);
 
-  // Keyboard shortcut: Ctrl + Shift + C
-  document.addEventListener('keydown', function (e) {
-    if (e.ctrlKey && e.shiftKey && e.code === 'KeyC') {
-      e.preventDefault(); // prevent browser default (like opening dev tools)
-      const coords = document.getElementById('coords').textContent;
-      navigator.clipboard.writeText(coords);
+    function toggleView() {
+        const iti = document.getElementById('itinerary'), pane = document.getElementById('map-pane'), btn = document.getElementById('fab');
+        if (pane.classList.contains('hidden')) {
+            pane.classList.replace('hidden', 'visible');
+            iti.classList.replace('visible', 'hidden');
+            btn.innerText = '📄';
+            setTimeout(() => { map.invalidateSize(); }, 50);
+        } else {
+            pane.classList.replace('visible', 'hidden');
+            iti.classList.replace('hidden', 'visible');
+            btn.innerText = '🗺️';
+        }
     }
-  });
+
+    function centerMapOnPoint(at, ng) { 
+        if(window.innerWidth <= 768) toggleView();
+        map.setView([at, ng], 14); 
+    }
+    function centerMapByBounds(b) { 
+        if(window.innerWidth <= 768) toggleView();
+        map.fitBounds(b); 
+    }
+    map.on('move', () => {
+        const c = map.getCenter();
+        document.getElementById('coords').innerText = `${c.lat.toFixed(6)},${c.lng.toFixed(6)}`;
+    });
+    document.getElementById('copy-btn').onclick = (e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(document.getElementById('coords').innerText);
+        document.getElementById('copy-btn').innerText = '✅';
+        setTimeout(() => document.getElementById('copy-btn').innerText = '📋', 1000);
+    };
+    function downloadtext(i, n) {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([gpxData[i]], {type:'text/plain'}));
+        a.download = n; a.click();
+    }
 </script>
 </body>
 </html>
-
 ''')
-#import pprint
-#pprint.pprint(map_data)
