@@ -46,7 +46,8 @@ day_count = 0
 current_date = False
 current_date_pretty = False
 last_date = False
-map_data = {} 
+first_date = False
+map_data = {}
 page_title = 'Tripsnip'
 route_index = -1
 
@@ -90,10 +91,16 @@ with open(argv[1], 'r') as f:
             match = search(r'^##\ (\d{4})-(\d{2})-(\d{2})', l)
             if match:
                 y, m, d = map(int, match.groups())
+
                 current_date = date(y, m, d)
+                if not first_date:
+                    first_date = current_date
+                    day_count = 1
+                else:
+                    day_count = (current_date - first_date).days + 1
                 last_date = current_date
-                current_date_pretty = f"{current_date.strftime('%a')} {ordinal(current_date.day)} {current_date.strftime('%b %Y')}, Day {day_count + 1}"
-                day_count += 1
+                current_date_pretty = f"{current_date.strftime('%a')} {ordinal(current_date.day)} {current_date.strftime('%b %Y')}, Day {day_count}"
+
                 i_md += f'## {current_date_pretty}\n'
             else: i_md += l + '\n'
         elif l.startswith('# '):
@@ -110,13 +117,14 @@ html_template = '''<!DOCTYPE html>
 <title>{title}</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 <style>
-    body {{ margin: 0; font-family: sans-serif; font-size: 13px; overflow: hidden; background: white; }}
+    body {{ margin: 0; font-family: sans-serif; font-size: 14px; overflow: hidden; background: white; }}
     h1 {{ color: #76AF5B; cursor: pointer; margin-top: 0; }}
     .container {{ display: flex; height: 100vh; width: 100vw; }}
-    .menu {{ width: 35%; padding: 25px; overflow-y: auto; box-sizing: border-box; background: white; border-right: 1px solid #eee; }}
+    .menu {{ width: 35%; padding: 1em; overflow-y: auto; box-sizing: border-box; background: white; border-right: 1px solid #eee; }}
     .content {{ width: 65%; position: relative; height: 100%; }}
     #map {{ height: 100%; width: 100%; background: #f0f0f0; }}
-    
+    ul {{ padding-left: 1em; }}
+    h2 {{ color: #333; margin: 1em 0 .4em 0; font-size: 1.2em;}}
     #fab {{
         display: none; 
         position: fixed; 
