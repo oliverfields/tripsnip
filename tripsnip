@@ -210,6 +210,8 @@ print('''
         allBounds.extend([m.lat, m.lng]);
     });
 
+    // Rainbow -> const gpxColors = ['#e74c3c','#e67e22','#f1c40f','#2ecc71','#1abc9c','#3498db','#9b59b6','#e91e63','#00bcd4','#8bc34a'];
+    const gpxColors = ['#00ffff','#ff00ff','#00ff00','#ff6600','#ff0099','#00ccff','#ffff00','#ff3300','#cc00ff','#00ff99'];
     const gpxData = [
 ''')
 print_leaflet_gpx_routes_js()
@@ -217,9 +219,10 @@ print('];')
 
 print('''
     let loaded = 0;
-    gpxData.forEach(xml => {
+    gpxData.forEach((xml, i) => {
         const url = URL.createObjectURL(new Blob([xml], {type: 'application/gpx+xml'}));
-        new L.GPX(url, { async: true, marker_options: { startIconUrl: null, endIconUrl: null, shadowUrl: null } })
+        const color = gpxColors[i % gpxColors.length];
+        new L.GPX(url, { async: true, marker_options: { startIconUrl: null, endIconUrl: null, shadowUrl: null }, polyline_options: { color: color, weight: 3 } })
         .on('loaded', e => {
             allBounds.extend(e.target.getBounds());
             map.fitBounds(allBounds, {padding: [30, 30]});
