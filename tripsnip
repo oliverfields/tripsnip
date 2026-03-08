@@ -47,9 +47,15 @@ current_date = False
 current_date_pretty = False
 last_date = False
 first_date = False
+first_date_pretty = False
+last_date_pretty = False
 map_data = {}
 page_title = 'Tripsnip'
 route_index = -1
+total_dist = 0.0
+total_up = 0.0
+total_down = 0.0
+summary_placeholder = '\x00SUMMARY\x00'
 
 if len(argv) != 2:
     print("Usage: tripsnip <file.trps>")
@@ -59,10 +65,9 @@ with open(argv[1], 'r') as f:
     for l in f:
         l = l.strip()
         if not l: continue
+        if l.startswith('//'): continue
 
-        if l.startswith('//'):
-            continue
-        elif l.startswith('- todo:'):
+        if l.startswith('- todo:'):
             content = l.replace('- todo:', '', 1).strip()
             i_md += f'- {content}\n'
             add_map_data(content, data_type='todos')
@@ -86,6 +91,9 @@ with open(argv[1], 'r') as f:
                 gpx = gpxpy.parse(gf)
             dist = gpx.length_3d() / 1000
             up, down = gpx.get_uphill_downhill()
+            total_dist += dist
+            total_up += up
+            total_down += down
             b = gpx.get_bounds()
             l_bounds = [[b.min_latitude, b.min_longitude], [b.max_latitude, b.max_longitude]]
             i_md += f'- <a href="#" onclick="event.preventDefault();centerMapByBounds({l_bounds})">{gpx_file}</a> {dist:.1f}km ↗{up:.0f}m ↘{down:.0f}m <a href="#" onclick="event.preventDefault();downloadtext({route_index}, \'{gpx_file}\')">💾</a>\n'
@@ -101,14 +109,34 @@ with open(argv[1], 'r') as f:
                 else:
                     day_count = (current_date - first_date).days + 1
                 last_date = current_date
-                current_date_pretty = f"{current_date.strftime('%a')} {ordinal(current_date.day)} {current_date.strftime('%b %Y')}, Day {day_count}"
+                date_label = f"{current_date.strftime('%a')} {ordinal(current_date.day)} {current_date.strftime('%b %Y')}"
+                current_date_pretty = f"{date_label}, Day {day_count}"
+                if not first_date_pretty:
+                    first_date_pretty = date_label
+                last_date_pretty = date_label
 
                 i_md += f'## {current_date_pretty}\n'
             else: i_md += l + '\n'
         elif l.startswith('# '):
             page_title = l.lstrip('# ') + ' - Tripsnip'
             i_md += l + '\n'
+            i_md += summary_placeholder + '\n'
         else: i_md += l + '\n'
+
+# Build summary bullets and substitute placeholder
+if first_date_pretty and last_date_pretty:
+    num_days = (last_date - first_date).days + 1
+    date_range_line = f'* {first_date_pretty} – {last_date_pretty}, {num_days} days'
+else:
+    date_range_line = ''
+
+if total_dist > 0:
+    distance_line = f'* Distance {total_dist:.1f}km ↗{total_up:.0f}m ↘{total_down:.0f}m'
+else:
+    distance_line = ''
+
+summary_md = '\n'.join(filter(None, [date_range_line, distance_line]))
+i_md = i_md.replace(summary_placeholder + '\n', summary_md + '\n' if summary_md else '')
 
 # Use a standard string (no f-prefix) to avoid brace conflicts
 html_template = '''<!DOCTYPE html>
