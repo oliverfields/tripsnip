@@ -60,7 +60,9 @@ with open(argv[1], 'r') as f:
         l = l.strip()
         if not l: continue
 
-        if l.startswith('- todo:'):
+        if l.startswith('//'):
+            continue
+        elif l.startswith('- todo:'):
             content = l.replace('- todo:', '', 1).strip()
             i_md += f'- {content}\n'
             add_map_data(content, data_type='todos')
@@ -113,6 +115,7 @@ html_template = '''<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📍</text></svg>">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>{title}</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
@@ -124,6 +127,7 @@ html_template = '''<!DOCTYPE html>
     .content {{ width: 65%; position: relative; height: 100%; }}
     #map {{ height: 100%; width: 100%; background: #f0f0f0; }}
     ul {{ padding-left: 1em; }}
+    li {{ line-height: 1.5em; margin-bottom: .5em; }}
     h2 {{ color: #333; margin: 1em 0 .4em 0; font-size: 1.2em;}}
     #fab {{
         display: none; 
