@@ -79,7 +79,7 @@ with open(argv[1], 'r') as f:
             match = search(r'^- marker:([0-9.-]+),([0-9.-]+)\s+(.*)', l)
             if match:
                 lat, lng, txt = match.groups()
-                i_md += f'- <a href="#" onclick="event.preventDefault();centerMapOnPoint({lat}, {lng});">{txt}</a>\n'
+                i_md += f'- {txt} <a class="center-map-button" href="#" onclick="event.preventDefault();centerMapOnPoint({lat}, {lng});">🔍</a>\n'
                 add_map_data({'lat': lat, 'lng': lng, 'txt': txt}, data_type='markers')
             else:
                 print(f"Malformed marker line: {l}"); exit(1)
@@ -96,7 +96,7 @@ with open(argv[1], 'r') as f:
             total_down += down
             b = gpx.get_bounds()
             l_bounds = [[b.min_latitude, b.min_longitude], [b.max_latitude, b.max_longitude]]
-            i_md += f'- <a href="#" onclick="event.preventDefault();centerMapByBounds({l_bounds})">{gpx_file}</a> {dist:.1f}km ↗{up:.0f}m ↘{down:.0f}m <a href="#" onclick="event.preventDefault();downloadtext({route_index}, \'{gpx_file}\')">💾</a>\n'
+            i_md += f'- {dist:.1f}km ↗{up:.0f}m ↘{down:.0f}m <a class="center-map-button" href="#" onclick="event.preventDefault();centerMapByBounds({l_bounds})">🔍</a><a class="center-map-button" href="#" onclick="event.preventDefault();downloadtext({route_index}, \'{gpx_file}\')" title="{gpx_file}">⬇️</a>\n'
         elif l.startswith('## '):
             match = search(r'^##\ (\d{4})-(\d{2})-(\d{2})', l)
             if match:
@@ -177,21 +177,20 @@ html_template = '''<!DOCTYPE html>
     }}
 /* Static Crosshair */
     #map::after {{
-        content: '';
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 20px;
-        height: 20px;
-        margin-left: -10px;
-        margin-top: -10px;
-        /* Using gradients to draw a thin crosshair */
-        background: 
-            linear-gradient(to bottom, transparent 9px, #333 9px, #333 11px, transparent 11px),
-            linear-gradient(to right, transparent 9px, #333 9px, #333 11px, transparent 11px);
-        z-index: 2000;
-        pointer-events: none; /* Allows you to still click/drag the map through the crosshair */
-        opacity: 0.6;
+    content: '⌖';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 2em;
+    color: #000;
+    z-index: 2000;
+    pointer-events: none;
+    opacity: 0.6;
+}}
+    .center-map-button {{
+    text-decoration: none;
+    padding-left: 1em;
     }}
     .custom-marker {{ position: relative; width: 40px; height: 40px; background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15 15"><path fill="salmon" d="M7.5,0C5.1,0,2.2,1.5,2.2,5.3C2.2,7.8,6.3,13.5,7.5,15c1.1-1.5,5.3-7,5.3-9.7C12.8,1.5,9.9,0,7.5,0z"/></svg>'); background-size: contain; background-repeat: no-repeat; }}
     .custom-marker span {{ position: absolute; top: 35%; left: 50%; transform: translate(-50%, -50%); font-size: 16px; }}
