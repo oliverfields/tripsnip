@@ -55,6 +55,7 @@ last_date_pretty = False
 map_data = {}
 page_title = 'Tripsnip'
 route_index = -1
+route_stats = []
 total_dist = 0.0
 total_up = 0.0
 total_down = 0.0
@@ -96,6 +97,7 @@ with open(argv[1], 'r') as f:
             total_dist += dist
             total_up += up
             total_down += down
+            route_stats.append(f"{dist:.1f}km ↗{up:.0f}m ↘{down:.0f}m")
             b = gpx.get_bounds()
             l_bounds = [[b.min_latitude, b.min_longitude], [b.max_latitude, b.max_longitude]]
             i_md += f'- 📏 {dist:.1f}km ↗{up:.0f}m ↘{down:.0f}m <a class="center-map-button" href="#" onclick="event.preventDefault();centerMapByBounds({l_bounds})">🔍</a><a class="center-map-button" href="#" onclick="event.preventDefault();downloadtext({route_index}, \'{gpx_file}\')" title="{gpx_file}">⬇️</a>\n'
@@ -254,10 +256,13 @@ print_leaflet_gpx_routes_js()
 print('];')
 
 print('const gpxLabels = [')
+route_i = 0
 for d in map_data.values():
     for r in d['routes']:
-        label = f"{d['date_pretty']} {r.strip()}"
+        stats = route_stats[route_i] if route_i < len(route_stats) else ''
+        label = f"{stats}<br>{r.strip()}<br>{d['date_pretty']}"
         print(f"  {repr(label)},")
+        route_i += 1
 print('];')
 
 print('''
