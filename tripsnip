@@ -1,16 +1,16 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
-from sys import argv, exit
+import sys
 from re import search, sub
 from datetime import date
 from markdown import markdown
-from os.path import dirname, join
+from os.path import dirname, join, splitext
 from os import chdir
 import gpxpy
 
 def print_leaflet_gpx_routes_js():
-    target_dir = dirname(argv[1])
+    target_dir = dirname(sys.argv[1])
     if target_dir:
         chdir(target_dir)
 
@@ -61,11 +61,14 @@ total_up = 0.0
 total_down = 0.0
 summary_placeholder = '\x00SUMMARY\x00'
 
-if len(argv) != 2:
+if len(sys.argv) != 2:
     print("Usage: tripsnip <file.trps>")
-    exit(1)
+    sys.exit(1)
 
-with open(argv[1], 'r') as f:
+out_file = splitext(sys.argv[1])[0] + '.html'
+sys.stdout = open(out_file, 'w', encoding='utf-8')
+
+with open(sys.argv[1], 'r') as f:
     for l in f:
         l = l.strip()
         if not l: continue
@@ -90,7 +93,7 @@ with open(argv[1], 'r') as f:
             gpx_file = l.replace('- route:', '', 1).strip()
             add_map_data(gpx_file, data_type='routes')
             route_index += 1
-            with open(join(dirname(argv[1]), gpx_file), 'r') as gf:
+            with open(join(dirname(sys.argv[1]), gpx_file), 'r') as gf:
                 gpx = gpxpy.parse(gf)
             dist = gpx.length_3d() / 1000
             up, down = gpx.get_uphill_downhill()
@@ -260,7 +263,7 @@ route_i = 0
 for d in map_data.values():
     for r in d['routes']:
         stats = route_stats[route_i] if route_i < len(route_stats) else ''
-        label = f"{stats}<br>{r.strip()}<br>{d['date_pretty']}"
+        label = f"{d['date_pretty']} — {r.strip()} — {stats}"
         print(f"  {repr(label)},")
         route_i += 1
 print('];')
