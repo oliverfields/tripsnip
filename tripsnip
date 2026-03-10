@@ -212,22 +212,9 @@ html_template = '''<!DOCTYPE html>
         outline: none;
         border: none;
     }}
-    #map::after {{
-        content: '⌖';
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        font-size: 2em;
-        color: #000;
-        z-index: 2000;
-        pointer-events: none;
-        opacity: 0.6;
-    }}
     .center-map-button {{ padding-left: 1em; }}
     .custom-marker {{ position: relative; width: 40px; height: 40px; background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15 15"><path fill="white" stroke="black" stroke-width="0.5" d="M7.5,0C5.1,0,2.2,1.5,2.2,5.3C2.2,7.8,6.3,13.5,7.5,15c1.1-1.5,5.3-7,5.3-9.7C12.8,1.5,9.9,0,7.5,0z"/></svg>'); background-size: contain; background-repeat: no-repeat; }}
     .custom-marker span {{ position: absolute; top: 35%; left: 50%; transform: translate(-50%, -50%); font-size: 16px; }}
-    #map-coords {{ position: absolute; bottom: 10px; left: 10px; background: rgba(255,255,255,0.8); padding: 5px; z-index: 1000; font-family: monospace; border-radius: 3px; font-size: 11px; pointer-events: none; }}
     @media (max-width: 768px) {{
         #fab {{ display: flex; }}
         .menu, .content {{ width: 100%; position: absolute; top: 0; left: 0; height: 100%; transition: opacity 0.2s; }}
@@ -240,7 +227,7 @@ html_template = '''<!DOCTYPE html>
 <button id="fab" onclick="toggleView()">🗺️</button>
 <div class="container">
     <div id="itinerary" class="menu visible">{body}</div>
-    <div id="map-pane" class="content hidden"><div id="map"></div><div id="map-coords"><span id="coords"></span> <span id="copy-btn" style="cursor:pointer; pointer-events: auto;">📋</span></div></div>
+    <div id="map-pane" class="content hidden"><div id="map"></div></div>
 </div>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.5.1/gpx.min.js"></script>
@@ -263,9 +250,10 @@ html_template = '''<!DOCTYPE html>
         const lngStr = absLng + (lng >= 0 ? 'E' : 'W');
         const climateUrl = `https://www.meteoblue.com/en/weather/historyclimate/climatemodelled/${{latStr}}-${{lngStr}}`;
         const forecastUrl = `https://www.yr.no/en/forecast/daily-table/${{lat}},${{lng}}`;
+        const coordStr = `${{lat}},${{lng}}`;
         L.popup()
             .setLatLng(e.latlng)
-            .setContent(`<a href="${{climateUrl}}" target="_blank">📊 Average climate</a><br><a href="${{forecastUrl}}" target="_blank">🌦️ Forecast</a>`)
+            .setContent(`<a href="${{climateUrl}}" target="_blank">📊 Average climate</a><br><a href="${{forecastUrl}}" target="_blank">🌦️ Forecast</a><br><a href="#" id="copy-coord-link" onclick="event.preventDefault();navigator.clipboard.writeText('${{coordStr}}').then(()=>{{const el=document.getElementById('copy-coord-link');el.innerText='✅ Copied!';setTimeout(()=>el.innerText='📋 Copy map coordinates',1500)}})">📋 Copy map coordinates</a>`)
             .openOn(map);
     }});
 '''
@@ -348,16 +336,6 @@ print('''
         if(window.innerWidth <= 768) toggleView();
         map.fitBounds(b);
     }
-    map.on('move', () => {
-        const c = map.getCenter();
-        document.getElementById('coords').innerText = `${c.lat.toFixed(6)},${c.lng.toFixed(6)}`;
-    });
-    document.getElementById('copy-btn').onclick = (e) => {
-        e.stopPropagation();
-        navigator.clipboard.writeText(document.getElementById('coords').innerText);
-        document.getElementById('copy-btn').innerText = '✅';
-        setTimeout(() => document.getElementById('copy-btn').innerText = '📋', 1000);
-    };
     function downloadtext(i, n) {
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([gpxData[i]], {type:'text/plain'}));
