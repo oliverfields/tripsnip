@@ -44,14 +44,12 @@ def add_map_data(data_content, data_type='markers'):
     map_data[day_count][data_type].append(data_content)
 
 def ensure_ul_open():
-    """Emit <ul> opening tag if not already open."""
     global i_html, ul_open
     if not ul_open:
         i_html += '<ul>\n'
         ul_open = True
 
 def close_ul_if_open():
-    """Emit </ul> closing tag if currently open."""
     global i_html, ul_open
     if ul_open:
         i_html += '</ul>\n'
@@ -165,21 +163,7 @@ if total_dist > 0:
 else:
     distance_line = ''
 
-all_lats = [float(m['lat']) for d in map_data.values() for m in d['markers']]
-all_lngs = [float(m['lng']) for d in map_data.values() for m in d['markers']]
-if all_lats:
-    center_lat = round(sum(all_lats) / len(all_lats), 4)
-    center_lng = round(sum(all_lngs) / len(all_lngs), 4)
-    month_name = first_date.strftime('%B') if first_date else ''
-    lat_str = f"{abs(center_lat)}{'S' if center_lat < 0 else 'N'}"
-    lng_str = f"{abs(center_lng)}{'W' if center_lng < 0 else 'E'}"
-    average_climate_url = f"https://www.meteoblue.com/en/weather/historyclimate/climatemodelled/{lat_str}-{lng_str}"
-    forecast_url = f"https://www.yr.no/en/forecast/daily-table/{abs(center_lat)},{abs(center_lng)}"
-    weather_line = f'<li class="weather"><a href="{average_climate_url}" target="_blank">Average</a> &bull; <a href="{forecast_url}" target="_blank">Forecast</a></li>'
-else:
-    weather_line = ''
-
-summary_html = '\n'.join(filter(None, [date_range_line, distance_line, weather_line]))
+summary_html = '\n'.join(filter(None, [date_range_line, distance_line]))
 summary_block = f'<ul class="summary">\n{summary_html}\n</ul>\n' if summary_html else ''
 i_html = i_html.replace(summary_placeholder + '\n', summary_block)
 
@@ -205,7 +189,6 @@ html_template = '''<!DOCTYPE html>
     li::before {{ position: absolute; left: 0; }}
     li::before        {{ content: '🔹'; }}
     li.summary::before {{ content: '🔹'; }}
-    li.weather::before {{ content: '🌦️'; }}
     li.marker::before {{ content: '📍'; }}
     li.route::before  {{ content: '📏'; }}
     li.todo::before   {{ content: '☐'; }}
@@ -270,6 +253,21 @@ html_template = '''<!DOCTYPE html>
         const match = str.match(/(\\p{{Extended_Pictographic}})/u);
         return match ? match[1] : '';
     }}
+
+    map.on('click', function(e) {{
+        const lat = e.latlng.lat.toFixed(4);
+        const lng = e.latlng.lng.toFixed(4);
+        const absLat = Math.abs(lat);
+        const absLng = Math.abs(lng);
+        const latStr = absLat + (lat >= 0 ? 'N' : 'S');
+        const lngStr = absLng + (lng >= 0 ? 'E' : 'W');
+        const climateUrl = `https://www.meteoblue.com/en/weather/historyclimate/climatemodelled/${{latStr}}-${{lngStr}}`;
+        const forecastUrl = `https://www.yr.no/en/forecast/daily-table/${{lat}},${{lng}}`;
+        L.popup()
+            .setLatLng(e.latlng)
+            .setContent(`<a href="${{climateUrl}}" target="_blank">📊 Average climate</a><br><a href="${{forecastUrl}}" target="_blank">🌦️ Forecast</a>`)
+            .openOn(map);
+    }});
 '''
 
 print(html_template.format(title=page_title, body=i_html))
