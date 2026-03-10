@@ -173,8 +173,9 @@ if all_lats:
     month_name = first_date.strftime('%B') if first_date else ''
     lat_str = f"{abs(center_lat)}{'S' if center_lat < 0 else 'N'}"
     lng_str = f"{abs(center_lng)}{'W' if center_lng < 0 else 'E'}"
-    weather_url = f"https://www.meteoblue.com/en/weather/historyclimate/climatemodelled/{lat_str}-{lng_str}"
-    weather_line = f'<li class="summary"><a href="{weather_url}" target="_blank">🌦️ Average climate</a></li>'
+    average_climate_url = f"https://www.meteoblue.com/en/weather/historyclimate/climatemodelled/{lat_str}-{lng_str}"
+    forecast_url = f"https://www.yr.no/en/forecast/daily-table/{abs(center_lat)},{abs(center_lng)}"
+    weather_line = f'<li class="weather"><a href="{average_climate_url}" target="_blank">Average</a> &bull; <a href="{forecast_url}" target="_blank">Forecast</a></li>'
 else:
     weather_line = ''
 
@@ -204,6 +205,7 @@ html_template = '''<!DOCTYPE html>
     li::before {{ position: absolute; left: 0; }}
     li::before        {{ content: '🔹'; }}
     li.summary::before {{ content: '🔹'; }}
+    li.weather::before {{ content: '🌦️'; }}
     li.marker::before {{ content: '📍'; }}
     li.route::before  {{ content: '📏'; }}
     li.todo::before   {{ content: '☐'; }}
