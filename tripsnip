@@ -4,7 +4,6 @@
 import sys
 from re import search, sub
 from datetime import date
-from markdown import markdown
 from os.path import dirname, join, splitext
 from os import chdir
 import gpxpy
@@ -44,7 +43,22 @@ def add_map_data(data_content, data_type='markers'):
         map_data[day_count] = {'markers': [], 'routes': [], 'todos': [], 'dones': [], 'date_pretty': current_date_pretty}
     map_data[day_count][data_type].append(data_content)
 
-i_md = '' 
+def ensure_ul_open():
+    """Emit <ul> opening tag if not already open."""
+    global i_html, ul_open
+    if not ul_open:
+        i_html += '<ul>\n'
+        ul_open = True
+
+def close_ul_if_open():
+    """Emit </ul> closing tag if currently open."""
+    global i_html, ul_open
+    if ul_open:
+        i_html += '</ul>\n'
+        ul_open = False
+
+i_html = ''
+ul_open = False
 day_count = 0
 current_date = False
 current_date_pretty = False
@@ -62,7 +76,7 @@ total_down = 0.0
 summary_placeholder = '\x00SUMMARY\x00'
 
 if len(sys.argv) != 2:
-    print("Usage: tripsnip <file.trps>")
+    print("Usage: tripsnip <file.trps>", file=sys.stderr)
     sys.exit(1)
 
 out_file = splitext(sys.argv[1])[0] + '.html'
@@ -73,24 +87,27 @@ with open(sys.argv[1], 'r') as f:
         l = l.strip()
         if not l: continue
         elif l.startswith('//'): continue
-        elif l.startswith('- todo:'):
-            content = l.replace('- todo:', '', 1).strip()
-            i_md += f'- ☐ {linkify(content)}\n'
+        elif l.startswith('todo:'):
+            content = l.replace('todo:', '', 1).strip()
+            ensure_ul_open()
+            i_html += f'<li class="todo">{linkify(content)}</li>\n'
             add_map_data(content, data_type='todos')
-        elif l.startswith('- done:'):
-            content = l.replace('- done:', '', 1).strip()
-            i_md += f'- ☑ <del>{linkify(content)}</del>\n'
+        elif l.startswith('done:'):
+            content = l.replace('done:', '', 1).strip()
+            ensure_ul_open()
+            i_html += f'<li class="done"><del>{linkify(content)}</del></li>\n'
             add_map_data(content, data_type='dones')
-        elif l.startswith('- marker:'):
-            match = search(r'^- marker:([0-9.-]+),([0-9.-]+)\s+(.*)', l)
+        elif l.startswith('marker:'):
+            match = search(r'^marker:([0-9.-]+),([0-9.-]+)\s+(.*)', l)
             if match:
                 lat, lng, txt = match.groups()
-                i_md += f'- 📍 {linkify(txt)} <a class="center-map-button" href="#" onclick="event.preventDefault();centerMapOnPoint({lat}, {lng});">🔍</a>\n'
+                ensure_ul_open()
+                i_html += f'<li class="marker">{linkify(txt)} <a class="center-map-button" href="#" onclick="event.preventDefault();centerMapOnPoint({lat}, {lng});">🔍</a></li>\n'
                 add_map_data({'lat': lat, 'lng': lng, 'txt': txt}, data_type='markers')
             else:
                 raise ValueError(f"Malformed marker line: {l}")
-        elif l.startswith('- route:'):
-            gpx_file = l.replace('- route:', '', 1).strip()
+        elif l.startswith('route:'):
+            gpx_file = l.replace('route:', '', 1).strip()
             add_map_data(gpx_file, data_type='routes')
             route_index += 1
             with open(join(dirname(sys.argv[1]), gpx_file), 'r') as gf:
@@ -103,12 +120,13 @@ with open(sys.argv[1], 'r') as f:
             route_stats.append(f"{dist:.1f}km ↗{up:.0f}m ↘{down:.0f}m")
             b = gpx.get_bounds()
             l_bounds = [[b.min_latitude, b.min_longitude], [b.max_latitude, b.max_longitude]]
-            i_md += f'- 📏 {dist:.1f}km ↗{up:.0f}m ↘{down:.0f}m <a class="center-map-button" href="#" onclick="event.preventDefault();centerMapByBounds({l_bounds})">🔍</a><a class="center-map-button" href="#" onclick="event.preventDefault();downloadtext({route_index}, \'{gpx_file}\')" title="{gpx_file}">⬇️</a>\n'
+            ensure_ul_open()
+            i_html += f'<li class="route">{dist:.1f}km ↗{up:.0f}m ↘{down:.0f}m <a class="center-map-button" href="#" onclick="event.preventDefault();centerMapByBounds({l_bounds})">🔍</a><a class="center-map-button" href="#" onclick="event.preventDefault();downloadtext({route_index}, \'{gpx_file}\')" title="{gpx_file}">⬇️</a></li>\n'
         elif l.startswith('## '):
             match = search(r'^##\ (\d{4})-(\d{2})-(\d{2})', l)
+            close_ul_if_open()
             if match:
                 y, m, d = map(int, match.groups())
-
                 current_date = date(y, m, d)
                 if not first_date:
                     first_date = current_date
@@ -121,34 +139,49 @@ with open(sys.argv[1], 'r') as f:
                 if not first_date_pretty:
                     first_date_pretty = date_label
                 last_date_pretty = date_label
-
-                i_md += f'## {current_date_pretty}\n'
-            else: i_md += l + '\n'
+                i_html += f'<h2>{current_date_pretty}</h2>\n'
+            else:
+                i_html += f'<h2>{l[3:]}</h2>\n'
         elif l.startswith('# '):
             page_title = l.lstrip('# ') + ' - Tripsnip'
-            i_md += l + '\n'
-            i_md += summary_placeholder + '\n'
-        elif l.startswith('- '):
-            content = l[2:].strip()
-            i_md += f'- {linkify(content)}\n'
-        else: i_md += l + '\n'
+            i_html += f'<h1>{l[2:]}</h1>\n'
+            i_html += summary_placeholder + '\n'
+        else:
+            content = l.strip()
+            ensure_ul_open()
+            i_html += f'<li>{linkify(content)}</li>\n'
 
-# Build summary bullets and substitute placeholder
+close_ul_if_open()
+
+# Build summary and substitute placeholder
 if first_date_pretty and last_date_pretty:
     num_days = (last_date - first_date).days + 1
-    date_range_line = f'- {first_date_pretty} – {last_date_pretty}, {num_days} days'
+    date_range_line = f'<li class="summary">{first_date_pretty} – {last_date_pretty}, {num_days} days</li>'
 else:
     date_range_line = ''
 
 if total_dist > 0:
-    distance_line = f'- Distance {total_dist:.1f}km ↗{total_up:.0f}m ↘{total_down:.0f}m'
+    distance_line = f'<li class="summary">Distance {total_dist:.1f}km ↗{total_up:.0f}m ↘{total_down:.0f}m</li>'
 else:
     distance_line = ''
 
-summary_md = '\n'.join(filter(None, [date_range_line, distance_line]))
-i_md = i_md.replace(summary_placeholder + '\n', summary_md + '\n' if summary_md else '')
+all_lats = [float(m['lat']) for d in map_data.values() for m in d['markers']]
+all_lngs = [float(m['lng']) for d in map_data.values() for m in d['markers']]
+if all_lats:
+    center_lat = round(sum(all_lats) / len(all_lats), 4)
+    center_lng = round(sum(all_lngs) / len(all_lngs), 4)
+    month_name = first_date.strftime('%B') if first_date else ''
+    lat_str = f"{abs(center_lat)}{'S' if center_lat < 0 else 'N'}"
+    lng_str = f"{abs(center_lng)}{'W' if center_lng < 0 else 'E'}"
+    weather_url = f"https://www.meteoblue.com/en/weather/historyclimate/climatemodelled/{lat_str}-{lng_str}"
+    weather_line = f'<li class="summary"><a href="{weather_url}" target="_blank">🌦️ Average climate</a></li>'
+else:
+    weather_line = ''
 
-# Use a standard string (no f-prefix) to avoid brace conflicts
+summary_html = '\n'.join(filter(None, [date_range_line, distance_line, weather_line]))
+summary_block = f'<ul class="summary">\n{summary_html}\n</ul>\n' if summary_html else ''
+i_html = i_html.replace(summary_placeholder + '\n', summary_block)
+
 html_template = '''<!DOCTYPE html>
 <html>
 <head>
@@ -159,54 +192,58 @@ html_template = '''<!DOCTYPE html>
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 <style>
     body {{ margin: 0; font-family: sans-serif; font-size: 14px; overflow: hidden; background: white; }}
-    a {{text-decoration: none;}}
+    a {{ text-decoration: none; }}
     h1 {{ color: #76AF5B; cursor: pointer; margin-top: 0; }}
     .container {{ display: flex; height: 100vh; width: 100vw; }}
     .menu {{ width: 35%; padding: 1em; overflow-y: auto; box-sizing: border-box; background: white; border-right: 1px solid #eee; }}
     .content {{ width: 65%; position: relative; height: 100%; }}
     #map {{ height: 100%; width: 100%; background: #f0f0f0; }}
-    ul {{ padding-left: 1em; }}
-    li {{ list-style-type: none; line-height: 1.5em; margin-bottom: .5em; }}
-    h2 {{ color: #777; margin: 1.5em 0 .4em 0; font-size: 1.2em;}}
+    ul {{ padding-left: 0; list-style: none; margin: 0 0 0.5em 0; }}
+    ul.summary {{ margin-bottom: 1em; }}
+    li {{ line-height: 1.5em; margin-bottom: .5em; padding-left: 1.6em; position: relative; }}
+    li::before {{ position: absolute; left: 0; }}
+    li::before        {{ content: '🔹'; }}
+    li.summary::before {{ content: '🔹'; }}
+    li.marker::before {{ content: '📍'; }}
+    li.route::before  {{ content: '📏'; }}
+    li.todo::before   {{ content: '☐'; }}
+    li.done::before   {{ content: '☑'; }}
+    h2 {{ color: #777; margin: 1.5em 0 .4em 0; font-size: 1.2em; }}
     #fab {{
-        display: none; 
-        position: fixed; 
-        bottom: 30px; 
-        left: 50%; 
+        display: none;
+        position: fixed;
+        bottom: 30px;
+        left: 50%;
         transform: translateX(-50%);
-        z-index: 3000; 
-        width: 60px; 
-        height: 60px; 
-        border-radius: 50%; 
+        z-index: 3000;
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
         background: white;
-        cursor: pointer; 
-        font-size: 28px; 
-        align-items: center; 
-        justify-content: center; 
+        cursor: pointer;
+        font-size: 28px;
+        align-items: center;
+        justify-content: center;
         outline: none;
         border: none;
     }}
-/* Static Crosshair */
     #map::after {{
-    content: '⌖';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 2em;
-    color: #000;
-    z-index: 2000;
-    pointer-events: none;
-    opacity: 0.6;
-}}
-    .center-map-button {{
-    padding-left: 1em;
+        content: '⌖';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 2em;
+        color: #000;
+        z-index: 2000;
+        pointer-events: none;
+        opacity: 0.6;
     }}
-.custom-marker {{ position: relative; width: 40px; height: 40px; background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15 15"><path fill="white" stroke="black" stroke-width="0.5" d="M7.5,0C5.1,0,2.2,1.5,2.2,5.3C2.2,7.8,6.3,13.5,7.5,15c1.1-1.5,5.3-7,5.3-9.7C12.8,1.5,9.9,0,7.5,0z"/></svg>'); background-size: contain; background-repeat: no-repeat; }}
+    .center-map-button {{ padding-left: 1em; }}
+    .custom-marker {{ position: relative; width: 40px; height: 40px; background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15 15"><path fill="white" stroke="black" stroke-width="0.5" d="M7.5,0C5.1,0,2.2,1.5,2.2,5.3C2.2,7.8,6.3,13.5,7.5,15c1.1-1.5,5.3-7,5.3-9.7C12.8,1.5,9.9,0,7.5,0z"/></svg>'); background-size: contain; background-repeat: no-repeat; }}
     .custom-marker span {{ position: absolute; top: 35%; left: 50%; transform: translate(-50%, -50%); font-size: 16px; }}
     #map-coords {{ position: absolute; bottom: 10px; left: 10px; background: rgba(255,255,255,0.8); padding: 5px; z-index: 1000; font-family: monospace; border-radius: 3px; font-size: 11px; pointer-events: none; }}
-
-    @media (max-width: 768px) {{ 
+    @media (max-width: 768px) {{
         #fab {{ display: flex; }}
         .menu, .content {{ width: 100%; position: absolute; top: 0; left: 0; height: 100%; transition: opacity 0.2s; }}
         .hidden {{ opacity: 0; pointer-events: none; z-index: 0; }}
@@ -233,7 +270,7 @@ html_template = '''<!DOCTYPE html>
     }}
 '''
 
-print(html_template.format(title=page_title, body=markdown(i_md)))
+print(html_template.format(title=page_title, body=i_html))
 
 print('const markers = [')
 print_leaflet_markers_js()
@@ -242,10 +279,10 @@ print('];')
 print('''
     markers.forEach(m => {
         const emoji = getEmoji(m.label);
-        const icon = L.divIcon({ 
-            className: '', 
-            html: `<div class="custom-marker"><span>${emoji}</span></div>`, 
-            iconSize: [40, 40], iconAnchor: [20, 40] 
+        const icon = L.divIcon({
+            className: '',
+            html: `<div class="custom-marker"><span>${emoji}</span></div>`,
+            iconSize: [40, 40], iconAnchor: [20, 40]
         });
         L.marker([m.lat, m.lng], {icon}).addTo(map).bindPopup(m.label);
         allBounds.extend([m.lat, m.lng]);
@@ -303,13 +340,13 @@ print('''
         }
     }
 
-    function centerMapOnPoint(at, ng) { 
+    function centerMapOnPoint(at, ng) {
         if(window.innerWidth <= 768) toggleView();
-        map.setView([at, ng], 14); 
+        map.setView([at, ng], 14);
     }
-    function centerMapByBounds(b) { 
+    function centerMapByBounds(b) {
         if(window.innerWidth <= 768) toggleView();
-        map.fitBounds(b); 
+        map.fitBounds(b);
     }
     map.on('move', () => {
         const c = map.getCenter();
