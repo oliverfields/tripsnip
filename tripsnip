@@ -29,6 +29,26 @@ def print_leaflet_markers_js():
             m_js += "{ lat: " + m['lat'] + ", lng: " + m['lng'] + ", label: '" + clean_txt + "', popup: '" + clean_popup + "' },\n"
     print(m_js.rstrip(',\n'))
 
+def print_elevation_profiles_js():
+    target_dir = dirname(sys.argv[1])
+    e_js = ''
+    for d in map_data.values():
+        for r in d['routes']:
+            with open(join(target_dir, r.strip()), 'r') as gf:
+                gpx = gpxpy.parse(gf)
+            points = []
+            dist = 0.0
+            prev = None
+            for track in gpx.tracks:
+                for segment in track.segments:
+                    for pt in segment.points:
+                        if prev:
+                            dist += pt.distance_3d(prev) / 1000
+                        points.append([round(dist, 3), round(pt.elevation or 0, 1)])
+                        prev = pt
+            e_js += repr(points) + ',\n'
+    print(e_js.rstrip(',\n'))
+
 def ordinal(n):
     if 10 <= n % 100 <= 20:
         suffix = 'th'
@@ -120,7 +140,7 @@ with open(sys.argv[1], 'r') as f:
             b = gpx.get_bounds()
             l_bounds = [[b.min_latitude, b.min_longitude], [b.max_latitude, b.max_longitude]]
             ensure_ul_open()
-            i_html += f'<li class="route" style="cursor:pointer" onclick="centerMapByBounds({l_bounds})">{dist:.1f}km ↗{up:.0f}m ↘{down:.0f}m <a href="#" onclick="event.stopPropagation();event.preventDefault();downloadtext({route_index}, \'{gpx_file}\')" title="{gpx_file}">⬇️</a></li>\n'
+            i_html += f'<li class="route" style="cursor:pointer" onclick="selectRoute({route_index}, {l_bounds})">{dist:.1f}km ↗{up:.0f}m ↘{down:.0f}m <a href="#" onclick="event.stopPropagation();event.preventDefault();downloadtext({route_index}, \'{gpx_file}\')" title="{gpx_file}">⬇️</a></li>\n'
         elif l.startswith('## '):
             match = search(r'^##\ (\d{4})-(\d{2})-(\d{2})', l)
             close_ul_if_open()
@@ -182,8 +202,12 @@ html_template = '''<!DOCTYPE html>
     h1 {{ color: #76AF5B; cursor: pointer; margin-top: 0; }}
     .container {{ display: flex; height: 100vh; width: 100vw; }}
     .menu {{ width: 35%; padding: 1em; overflow-y: auto; box-sizing: border-box; background: white; border-right: 1px solid #eee; }}
-    .content {{ width: 65%; position: relative; height: 100%; }}
-    #map {{ height: 100%; width: 100%; background: #f0f0f0; }}
+    .content {{ width: 65%; position: relative; height: 100%; display: flex; flex-direction: column; }}
+    #map {{ flex: 1; width: 100%; background: #f0f0f0; min-height: 0; }}
+    #elevation-panel {{ display: none; height: 120px; background: #f9f9f9; border-top: 2px solid #ccc; position: relative; flex-shrink: 0; }}
+    #elevation-panel canvas {{ width: 100%; height: 100%; display: block; }}
+    #elevation-close {{ position: absolute; top: 4px; right: 6px; cursor: pointer; font-size: 14px; color: #999; z-index: 10; line-height: 1; }}
+    #elevation-close:hover {{ color: #333; }}
     ul {{ padding-left: 0; list-style: none; margin: 0 0 0.5em 0; }}
     ul.summary {{ margin-bottom: 1em; }}
     li {{ line-height: 1.5em; margin-bottom: .5em; padding-left: 1.6em; position: relative; }}
@@ -227,7 +251,13 @@ html_template = '''<!DOCTYPE html>
 <button id="fab" onclick="toggleView()">🗺️</button>
 <div class="container">
     <div id="itinerary" class="menu visible">{body}</div>
-    <div id="map-pane" class="content hidden"><div id="map"></div></div>
+    <div id="map-pane" class="content hidden">
+        <div id="map"></div>
+        <div id="elevation-panel">
+            <span id="elevation-close" onclick="hideElevation()">✕</span>
+            <canvas id="elevation-canvas"></canvas>
+        </div>
+    </div>
 </div>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.5.1/gpx.min.js"></script>
@@ -288,6 +318,7 @@ print('''
         allBounds.extend([m.lat, m.lng]);
     });
 
+    // Rainbow -> const gpxColors = ['#e74c3c','#e67e22','#f1c40f','#2ecc71','#1abc9c','#3498db','#9b59b6','#e91e63','#00bcd4','#8bc34a'];
     const gpxColors = ['#00ffff','#ff00ff','#00ff00','#ff6600','#ff0099','#00ccff','#ffff00','#ff3300','#cc00ff','#00ff99'];
     const gpxData = [
 ''')
@@ -304,6 +335,10 @@ for d in map_data.values():
         route_i += 1
 print('];')
 
+print('const elevationProfiles = [')
+print_elevation_profiles_js()
+print('];')
+
 print('''
     let loaded = 0;
     gpxData.forEach((xml, i) => {
@@ -312,6 +347,7 @@ print('''
         new L.GPX(url, { async: true, marker_options: { startIconUrl: null, endIconUrl: null, shadowUrl: null }, polyline_options: { color: color, weight: 3 } })
         .on('loaded', e => {
             e.target.bindPopup(gpxLabels[i]);
+            e.target.on('click', () => showElevation(i));
             allBounds.extend(e.target.getBounds());
             map.fitBounds(allBounds, {padding: [30, 30]});
             loaded++;
@@ -324,6 +360,67 @@ print('''
     });
 
     if(markers.length > 0 && gpxData.length === 0) map.fitBounds(allBounds);
+
+    function showElevation(i) {
+        const panel = document.getElementById('elevation-panel');
+        const canvas = document.getElementById('elevation-canvas');
+        const ctx = canvas.getContext('2d');
+        const data = elevationProfiles[i];
+        if (!data || data.length === 0) return;
+        panel.style.display = 'block';
+        map.invalidateSize();
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+        const minE = Math.min(...data.map(p => p[1]));
+        const maxE = Math.max(...data.map(p => p[1]));
+        const maxD = data[data.length - 1][0];
+        const w = canvas.width, h = canvas.height;
+        const padL = 40, padR = 8, padT = 8, padB = 20;
+        const eRange = maxE - minE || 1;
+        // Fill background
+        ctx.fillStyle = '#f9f9f9';
+        ctx.fillRect(0, 0, w, h);
+        // Draw filled area
+        ctx.beginPath();
+        data.forEach((p, j) => {
+            const x = padL + (p[0] / maxD) * (w - padL - padR);
+            const y = padT + (1 - (p[1] - minE) / eRange) * (h - padT - padB);
+            j === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        });
+        const lastX = padL + (w - padL - padR);
+        ctx.lineTo(lastX, h - padB);
+        ctx.lineTo(padL, h - padB);
+        ctx.closePath();
+        const color = gpxColors[i % gpxColors.length];
+        ctx.fillStyle = color + '33';
+        ctx.fill();
+        // Draw line
+        ctx.beginPath();
+        data.forEach((p, j) => {
+            const x = padL + (p[0] / maxD) * (w - padL - padR);
+            const y = padT + (1 - (p[1] - minE) / eRange) * (h - padT - padB);
+            j === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        });
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        // Y axis labels
+        ctx.fillStyle = '#666';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText(Math.round(maxE) + 'm', padL - 2, padT + 4);
+        ctx.fillText(Math.round(minE) + 'm', padL - 2, h - padB);
+        // X axis labels
+        ctx.textAlign = 'left';
+        ctx.fillText('0km', padL, h - 4);
+        ctx.textAlign = 'right';
+        ctx.fillText(maxD.toFixed(1) + 'km', w - padR, h - 4);
+    }
+
+    function hideElevation() {
+        document.getElementById('elevation-panel').style.display = 'none';
+        map.invalidateSize();
+    }
 
     function toggleView() {
         const iti = document.getElementById('itinerary'), pane = document.getElementById('map-pane'), btn = document.getElementById('fab');
@@ -346,6 +443,11 @@ print('''
     function centerMapByBounds(b) {
         if(window.innerWidth <= 768) toggleView();
         map.fitBounds(b);
+    }
+    function selectRoute(i, b) {
+        if(window.innerWidth <= 768) toggleView();
+        map.fitBounds(b);
+        showElevation(i);
     }
     function downloadtext(i, n) {
         const a = document.createElement('a');
