@@ -25,7 +25,8 @@ def print_leaflet_markers_js():
     for d in map_data.values():
         for m in d['markers']:
             clean_txt = m['txt'].replace("'", "\\'")
-            m_js += "{ lat: " + m['lat'] + ", lng: " + m['lng'] + ", label: '" + clean_txt + "' },\n"
+            clean_popup = linkify(m['txt']).replace("'", "\\'")
+            m_js += "{ lat: " + m['lat'] + ", lng: " + m['lng'] + ", label: '" + clean_txt + "', popup: '" + clean_popup + "' },\n"
     print(m_js.rstrip(',\n'))
 
 def ordinal(n):
@@ -100,7 +101,7 @@ with open(sys.argv[1], 'r') as f:
             if match:
                 lat, lng, txt = match.groups()
                 ensure_ul_open()
-                i_html += f'<li class="marker">{linkify(txt)} <a class="center-map-button" href="#" onclick="event.preventDefault();centerMapOnPoint({lat}, {lng});">🔍</a></li>\n'
+                i_html += f'<li class="marker" style="cursor:pointer" onclick="centerMapOnPoint({lat}, {lng})">{linkify(txt)}</li>\n'
                 add_map_data({'lat': lat, 'lng': lng, 'txt': txt}, data_type='markers')
             else:
                 raise ValueError(f"Malformed marker line: {l}")
@@ -119,7 +120,7 @@ with open(sys.argv[1], 'r') as f:
             b = gpx.get_bounds()
             l_bounds = [[b.min_latitude, b.min_longitude], [b.max_latitude, b.max_longitude]]
             ensure_ul_open()
-            i_html += f'<li class="route">{dist:.1f}km ↗{up:.0f}m ↘{down:.0f}m <a class="center-map-button" href="#" onclick="event.preventDefault();centerMapByBounds({l_bounds})">🔍</a><a class="center-map-button" href="#" onclick="event.preventDefault();downloadtext({route_index}, \'{gpx_file}\')" title="{gpx_file}">⬇️</a></li>\n'
+            i_html += f'<li class="route" style="cursor:pointer" onclick="centerMapByBounds({l_bounds})">{dist:.1f}km ↗{up:.0f}m ↘{down:.0f}m <a href="#" onclick="event.stopPropagation();event.preventDefault();downloadtext({route_index}, \'{gpx_file}\')" title="{gpx_file}">⬇️</a></li>\n'
         elif l.startswith('## '):
             match = search(r'^##\ (\d{4})-(\d{2})-(\d{2})', l)
             close_ul_if_open()
@@ -212,7 +213,6 @@ html_template = '''<!DOCTYPE html>
         outline: none;
         border: none;
     }}
-    .center-map-button {{ padding-left: 1em; }}
     .custom-marker {{ position: relative; width: 40px; height: 40px; background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15 15"><path fill="white" stroke="black" stroke-width="0.5" d="M7.5,0C5.1,0,2.2,1.5,2.2,5.3C2.2,7.8,6.3,13.5,7.5,15c1.1-1.5,5.3-7,5.3-9.7C12.8,1.5,9.9,0,7.5,0z"/></svg>'); background-size: contain; background-repeat: no-repeat; }}
     .custom-marker span {{ position: absolute; top: 35%; left: 50%; transform: translate(-50%, -50%); font-size: 16px; }}
     @media (max-width: 768px) {{
@@ -233,7 +233,19 @@ html_template = '''<!DOCTYPE html>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.5.1/gpx.min.js"></script>
 <script>
     const map = L.map('map', {{ zoomControl: false }}).setView([0,0], 2);
-    L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png').addTo(map);
+
+    const osmLayer = L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png');
+    const topoLayer = L.tileLayer('https://{{s}}.tile.opentopomap.org/{{z}}/{{x}}/{{y}}.png', {{ maxZoom: 17 }});
+    const hikingLayer = L.tileLayer('https://tile.waymarkedtrails.org/hiking/{{z}}/{{x}}/{{y}}.png', {{ maxZoom: 18, opacity: 0.7 }});
+
+    topoLayer.addTo(map);
+    hikingLayer.addTo(map);
+
+    L.control.layers(
+        {{ 'OpenStreetMap': osmLayer, 'OpenTopoMap': topoLayer }},
+        {{ 'Hiking overlay': hikingLayer }}
+    ).addTo(map);
+
     const allBounds = L.latLngBounds([]);
 
     function getEmoji(str) {{
@@ -272,11 +284,10 @@ print('''
             html: `<div class="custom-marker"><span>${emoji}</span></div>`,
             iconSize: [40, 40], iconAnchor: [20, 40]
         });
-        L.marker([m.lat, m.lng], {icon}).addTo(map).bindPopup(m.label);
+        L.marker([m.lat, m.lng], {icon}).addTo(map).bindPopup(m.popup);
         allBounds.extend([m.lat, m.lng]);
     });
 
-    // Rainbow -> const gpxColors = ['#e74c3c','#e67e22','#f1c40f','#2ecc71','#1abc9c','#3498db','#9b59b6','#e91e63','#00bcd4','#8bc34a'];
     const gpxColors = ['#00ffff','#ff00ff','#00ff00','#ff6600','#ff0099','#00ccff','#ffff00','#ff3300','#cc00ff','#00ff99'];
     const gpxData = [
 ''')
