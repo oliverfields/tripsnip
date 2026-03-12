@@ -116,7 +116,7 @@ total_dist = 0.0
 total_up = 0.0
 total_down = 0.0
 summary_placeholder = '\x00SUMMARY\x00'
-average_climate_url = ''
+climate_url = ''
 
 if len(sys.argv) != 2:
     print("Usage: tripsnip <file.trps>", file=sys.stderr)
@@ -130,8 +130,8 @@ with open(sys.argv[1], 'r') as f:
         l = l.strip()
         if not l: continue
         elif l.startswith('//'): continue
-        elif l.startswith('average-climate-url:'):
-            average_climate_url = l.replace('average-climate-url:', '', 1).strip()
+        elif l.startswith('climate-url:'):
+            climate_url = l.replace('climate-url:', '', 1).strip()
             continue
         elif l.startswith('todo:'):
             content = l.replace('todo:', '', 1).strip()
@@ -206,19 +206,20 @@ if first_date_pretty and last_date_pretty:
 else:
     date_range_line = ''
 
-if total_dist > 0:
-    distance_line = f'<li class="summary">Distance {total_dist:.1f}km ↑{total_up:.0f}m ↓{total_down:.0f}m</li>'
-else:
-    distance_line = ''
-
 combined_gpx_name = splitext(basename(sys.argv[1]))[0] + '.gpx'
 has_data = any(d['markers'] or d['routes'] for d in map_data.values())
-gpx_line = f'<li class="summary"><a href="#" onclick="downloadAllGpx()">GPX Bundle {combined_gpx_name} ⬇️</a></li>' if has_data else ''
-
-if average_climate_url:
-    climate_line = f'<li class="summary"><a href="{average_climate_url}" target="_blank">🌡️ Average climate</a></li>'
+if total_dist > 0 and has_data:
+    gpx_line = f'<li class="route" style="cursor:pointer" onclick="fitAllRoutes()">{total_dist:.1f}km ↑{total_up:.0f}m ↓{total_down:.0f}m <a href="#" onclick="event.stopPropagation();event.preventDefault();downloadAllGpx()" title="{combined_gpx_name}">⬇️</a></li>'
+elif total_dist > 0:
+    gpx_line = f'<li class="route" style="cursor:pointer" onclick="fitAllRoutes()">All {total_dist:.1f}km ↑{total_up:.0f}m ↓{total_down:.0f}m</li>'
 else:
-    climate_line = '<li class="summary"><a href="https://weatherspark.com/map" target="_blank">Set average-climate-url:<em>weatherspark url</em></a></li>'
+    gpx_line = ''
+distance_line = ''
+
+if climate_url:
+    climate_line = f'<li class="climate"><a href="{climate_url}" target="_blank">Climate</a></li>'
+else:
+    climate_line = '<li class="summary"><a href="https://weatherspark.com/map" target="_blank">Set <em>climate-url:&lt;weatherspark url&gt;</em></a></li>'
 
 summary_html = '\n'.join(filter(None, [date_range_line, distance_line, gpx_line, climate_line]))
 summary_block = f'<ul class="summary">\n{summary_html}\n</ul>\n' if summary_html else ''
@@ -250,6 +251,7 @@ html_template = '''<!DOCTYPE html>
     li::before {{ position: absolute; left: 0; }}
     li::before        {{ content: '🔹'; }}
     li.summary::before {{ content: '🔹'; }}
+    li.climate::before {{ content: '📊'; }}
     li.marker::before {{ content: '📍'; }}
     li.route::before  {{ content: '📏'; }}
     li.todo::before   {{ content: '☐'; }}
@@ -396,6 +398,11 @@ print('''
     });
 
     if(markers.length > 0 && gpxData.length === 0) map.fitBounds(allBounds);
+
+    function fitAllRoutes() {
+        if(window.innerWidth <= 768) toggleView();
+        if(allBounds.isValid()) map.fitBounds(allBounds, {padding: [30, 30]});
+    }
 
     function showElevation(i) {
         const panel = document.getElementById('elevation-panel');
