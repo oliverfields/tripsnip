@@ -116,6 +116,7 @@ total_dist = 0.0
 total_up = 0.0
 total_down = 0.0
 summary_placeholder = '\x00SUMMARY\x00'
+average_climate_url = ''
 
 if len(sys.argv) != 2:
     print("Usage: tripsnip <file.trps>", file=sys.stderr)
@@ -129,6 +130,9 @@ with open(sys.argv[1], 'r') as f:
         l = l.strip()
         if not l: continue
         elif l.startswith('//'): continue
+        elif l.startswith('average-climate-url:'):
+            average_climate_url = l.replace('average-climate-url:', '', 1).strip()
+            continue
         elif l.startswith('todo:'):
             content = l.replace('todo:', '', 1).strip()
             ensure_ul_open()
@@ -211,7 +215,12 @@ combined_gpx_name = splitext(basename(sys.argv[1]))[0] + '.gpx'
 has_data = any(d['markers'] or d['routes'] for d in map_data.values())
 gpx_line = f'<li class="summary"><a href="#" onclick="downloadAllGpx()">GPX Bundle {combined_gpx_name} ⬇️</a></li>' if has_data else ''
 
-summary_html = '\n'.join(filter(None, [date_range_line, distance_line, gpx_line]))
+if average_climate_url:
+    climate_line = f'<li class="summary"><a href="{average_climate_url}" target="_blank">🌡️ Average climate</a></li>'
+else:
+    climate_line = '<li class="summary"><a href="https://weatherspark.com/map" target="_blank">Set average-climate-url:<em>weatherspark url</em></a></li>'
+
+summary_html = '\n'.join(filter(None, [date_range_line, distance_line, gpx_line, climate_line]))
 summary_block = f'<ul class="summary">\n{summary_html}\n</ul>\n' if summary_html else ''
 i_html = i_html.replace(summary_placeholder + '\n', summary_block)
 
@@ -313,16 +322,11 @@ html_template = '''<!DOCTYPE html>
     map.on('click', function(e) {{
         const lat = e.latlng.lat.toFixed(4);
         const lng = e.latlng.lng.toFixed(4);
-        const absLat = Math.abs(lat);
-        const absLng = Math.abs(lng);
-        const latStr = absLat + (lat >= 0 ? 'N' : 'S');
-        const lngStr = absLng + (lng >= 0 ? 'E' : 'W');
-        const climateUrl = `https://www.meteoblue.com/en/weather/historyclimate/climatemodelled/${{latStr}}-${{lngStr}}`;
         const forecastUrl = `https://www.yr.no/en/forecast/daily-table/${{lat}},${{lng}}`;
         const coordStr = `${{lat}},${{lng}}`;
         L.popup()
             .setLatLng(e.latlng)
-            .setContent(`<a href="${{climateUrl}}" target="_blank">📊 Average climate</a><br><a href="${{forecastUrl}}" target="_blank">🌦️ Forecast</a><br><a href="#" id="copy-coord-link" onclick="event.preventDefault();navigator.clipboard.writeText('${{coordStr}}').then(()=>{{const el=document.getElementById('copy-coord-link');el.innerText='✅ Copied!';setTimeout(()=>el.innerText='📋 Copy map coordinates',1500)}})">📋 Copy map coordinates</a>`)
+            .setContent(`<a href="${{forecastUrl}}" target="_blank">🌦️ Forecast</a><br><a href="#" id="copy-coord-link" onclick="event.preventDefault();navigator.clipboard.writeText('${{coordStr}}').then(()=>{{const el=document.getElementById('copy-coord-link');el.innerText='✅ Copied!';setTimeout(()=>el.innerText='📋 Copy coordinates',1500)}})">📋 Copy coordinates</a>`)
             .openOn(map);
     }});
 '''
