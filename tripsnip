@@ -57,7 +57,7 @@ def ordinal(n):
     return f"{n}{suffix}"
 
 def linkify(text):
-    return sub(r'(https?://\S+?)([,.]?)(\s|$)', r'<a href="\1" target="_blank">🔗</a>\2\3', text)
+    return sub(r'(https?://\S+?)([,.]?)(\s|$)', r'<a onclick="event.stopPropagation()" href="\1" target="_blank">🔗</a>\2\3', text)
 
 def add_map_data(data_content, data_type='markers'):
     if not day_count in map_data.keys():
