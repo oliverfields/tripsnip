@@ -4,10 +4,25 @@
 import sys
 from re import search, sub
 from datetime import date
-from os.path import dirname, join, splitext, basename
-from os import chdir
+from os.path import dirname, join, splitext, basename, expanduser
+from os import chdir, environ
 import gpxpy
 from xml.etree import ElementTree as ET
+
+def read_maptiler_key():
+    # env var wins (handy for CI), then the config file
+    key = environ.get('MAPTILER_KEY')
+    if key:
+        return key.strip()
+    config_home = environ.get('XDG_CONFIG_HOME') or expanduser('~/.config')
+    key_path = join(config_home, 'tripsnip', 'maptiler_key')
+    try:
+        with open(key_path) as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        print(f"tripsnip: no MapTiler key (set MAPTILER_KEY or create {key_path})",
+              file=sys.stderr)
+        return ''
 
 def build_combined_gpx():
     root = ET.Element('gpx', version='1.1', creator='tripsnip')
@@ -117,6 +132,7 @@ total_up = 0.0
 total_down = 0.0
 summary_placeholder = '\x00SUMMARY\x00'
 climate_url = ''
+maptiler_key = read_maptiler_key()
 
 if len(sys.argv) != 2:
     print("Usage: tripsnip <file.trps>", file=sys.stderr)
@@ -302,16 +318,16 @@ html_template = '''<!DOCTYPE html>
 <script>
     const map = L.map('map', {{ zoomControl: false }}).setView([0,0], 2);
 
-    const osmLayer = L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png');
-    const topoLayer = L.tileLayer('https://{{s}}.tile.opentopomap.org/{{z}}/{{x}}/{{y}}.png', {{ maxZoom: 17 }});
-    const hikingLayer = L.tileLayer('https://tile.waymarkedtrails.org/hiking/{{z}}/{{x}}/{{y}}.png', {{ maxZoom: 18, opacity: 0.7 }});
+    const MAPTILER_KEY = '{maptiler_key}';
+    const osmAttr = '© <a href="https://www.maptiler.com/copyright/" target="_blank">MapTiler</a> © <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors';
 
-    topoLayer.addTo(map);
-    hikingLayer.addTo(map);
+    const streetLayer = L.tileLayer('https://api.maptiler.com/maps/openstreetmap/256/{{z}}/{{x}}/{{y}}.png?key=' + MAPTILER_KEY, {{ maxZoom: 20, attribution: osmAttr }});
+    const topoLayer = L.tileLayer('https://api.maptiler.com/maps/outdoor-v2/256/{{z}}/{{x}}/{{y}}.png?key=' + MAPTILER_KEY, {{ maxZoom: 20, attribution: osmAttr }});
+
+    streetLayer.addTo(map);
 
     L.control.layers(
-        {{ 'OpenStreetMap': osmLayer, 'OpenTopoMap': topoLayer }},
-        {{ 'Hiking overlay': hikingLayer }}
+        {{ 'OpenStreetMap': streetLayer, 'Topo': topoLayer }}
     ).addTo(map);
 
     const allBounds = L.latLngBounds([]);
@@ -333,7 +349,7 @@ html_template = '''<!DOCTYPE html>
     }});
 '''
 
-print(html_template.format(title=page_title, body=i_html))
+print(html_template.format(title=page_title, body=i_html, maptiler_key=maptiler_key))
 
 print('const markers = [')
 print_leaflet_markers_js()
