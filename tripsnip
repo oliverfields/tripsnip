@@ -315,6 +315,7 @@ html_template = '''<!DOCTYPE html>
 </div>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.5.1/gpx.min.js"></script>
+<script src="https://unpkg.com/leaflet-geometryutil@0.10.3/src/leaflet.geometryutil.js"></script>
 <script>
     const map = L.map('map', {{ zoomControl: false }}).setView([0,0], 2);
 
@@ -395,14 +396,35 @@ print(f'const combinedGpxName = {repr(combined_gpx_name)};')
 
 print('''
     let loaded = 0;
+    const trackLines = [];
+    let elevState = null;
+    let hoverMarker = null;
     gpxData.forEach((xml, i) => {
         const url = URL.createObjectURL(new Blob([xml], {type: 'application/gpx+xml'}));
         const color = gpxColors[i % gpxColors.length];
-        new L.GPX(url, { async: true, marker_options: { startIconUrl: null, endIconUrl: null, shadowUrl: null }, polyline_options: { color: color, weight: 3 } })
+        new L.GPX(url, { async: true, marker_options: { startIconUrl: null, endIconUrl: null, shadowUrl: null }, polyline_options: { color: color, weight: 6 } })
         .on('loaded', e => {
-            e.target.bindPopup(gpxLabels[i]);
-            e.target.on('click', () => showElevation(i));
-            allBounds.extend(e.target.getBounds());
+            const track = e.target;
+            track.bindPopup(gpxLabels[i]);
+            track.on('click', () => showElevation(i));
+
+            const line = track.getLayers().find(l => l.getLatLngs);
+            trackLines[i] = line;
+            const prof = elevationProfiles[i] || [];
+            const maxD = prof.length ? prof[prof.length - 1][0] : 0;
+            track.bindTooltip('', { sticky: true, direction: 'top', opacity: 0.9 });
+            track.on('mousemove', ev => {
+                if (!line || !maxD) return;
+                let frac;
+                try { frac = L.GeometryUtil.locateOnLine(map, line, ev.latlng); }
+                catch (err) { return; }
+                const km = frac * maxD;
+                track.setTooltipContent(km.toFixed(2) + ' km');
+                if (elevState && elevState.i === i) drawElevationCursor(km);
+            });
+            track.on('mouseout', () => { if (elevState && elevState.i === i) elevState.ctx.putImageData(elevState.base, 0, 0); });
+
+            allBounds.extend(track.getBounds());
             map.fitBounds(allBounds, {padding: [30, 30]});
             loaded++;
             if(loaded === gpxData.length) {
@@ -474,12 +496,62 @@ print('''
         ctx.fillText('0km', padL, h - 4);
         ctx.textAlign = 'right';
         ctx.fillText(maxD.toFixed(1) + 'km', w - padR, h - 4);
+
+        elevState = { i, ctx, data, minE, maxE, maxD, w, h, padL, padR, padT, padB,
+                      base: ctx.getImageData(0, 0, w, h) };
+    }
+
+    function drawElevationCursor(km) {
+        if (!elevState) return;
+        const s = elevState;
+        s.ctx.putImageData(s.base, 0, 0);
+        const x = s.padL + (km / s.maxD) * (s.w - s.padL - s.padR);
+        s.ctx.beginPath();
+        s.ctx.moveTo(x, s.padT);
+        s.ctx.lineTo(x, s.h - s.padB);
+        s.ctx.strokeStyle = '#333';
+        s.ctx.lineWidth = 1;
+        s.ctx.stroke();
+        s.ctx.fillStyle = '#333';
+        s.ctx.font = '10px sans-serif';
+        s.ctx.textAlign = 'center';
+        const lx = Math.min(Math.max(x, s.padL + 14), s.w - s.padR - 14);
+        s.ctx.fillText(km.toFixed(2) + 'km', lx, s.padT + 7);
     }
 
     function hideElevation() {
         document.getElementById('elevation-panel').style.display = 'none';
         map.invalidateSize();
+        elevState = null;
+        if (hoverMarker) { map.removeLayer(hoverMarker); hoverMarker = null; }
     }
+
+    // Canvas -> map: hovering the elevation profile moves a marker on the track
+    (function() {
+        const c = document.getElementById('elevation-canvas');
+        c.addEventListener('mousemove', ev => {
+            if (!elevState) return;
+            const s = elevState;
+            const x = ev.clientX - c.getBoundingClientRect().left;
+            let km = ((x - s.padL) / (s.w - s.padL - s.padR)) * s.maxD;
+            km = Math.max(0, Math.min(km, s.maxD));
+            drawElevationCursor(km);
+            const line = trackLines[s.i];
+            if (line && s.maxD > 0) {
+                let p;
+                try { p = L.GeometryUtil.interpolateOnLine(map, line, km / s.maxD); }
+                catch (err) { p = null; }
+                if (p) {
+                    if (!hoverMarker) hoverMarker = L.circleMarker(p.latLng, { radius: 5, color: '#333', weight: 2, fillColor: '#fff', fillOpacity: 1 }).addTo(map);
+                    else hoverMarker.setLatLng(p.latLng);
+                }
+            }
+        });
+        c.addEventListener('mouseleave', () => {
+            if (elevState) elevState.ctx.putImageData(elevState.base, 0, 0);
+            if (hoverMarker) { map.removeLayer(hoverMarker); hoverMarker = null; }
+        });
+    })();
 
     function toggleView() {
         const iti = document.getElementById('itinerary'), pane = document.getElementById('map-pane'), btn = document.getElementById('fab');
